@@ -1,6 +1,6 @@
 {
   "name": "locio",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A powerful CLI tool to count lines and files in directories with extensive filtering options",
   "bin": {
     "lc": "target/release/locio",
@@ -8,7 +8,8 @@
   },
   "scripts": {
     "start": "./target/release/locio",
-    "build": "source $HOME/.cargo/env && cargo build --release",
+    "build": "cargo build --release",
+    "postinstall": "npm run build",
     "prepublishOnly": "npm run build",
     "version:check": "./scripts/version.sh",
     "version:update": "./scripts/npm-version.sh",
@@ -26,8 +27,9 @@
   "author": "Toufiq Hasan Kiron <hello@kiron.dev>",
   "license": "MIT",
   "files": [
-    "target/release/locio",
-    "target/release/lc",
+    "src/",
+    "Cargo.toml",
+    "Cargo.lock",
     "README.md",
     "LICENSE"
   ],

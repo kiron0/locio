@@ -1,7 +1,7 @@
-# Rust source files (not needed in npm package)
-src/
-Cargo.toml
-Cargo.lock
+# Rust source files (needed for cross-platform builds)
+# src/ - included in package for postinstall build
+# Cargo.toml - included in package for postinstall build
+# Cargo.lock - included in package for reproducible builds
 scripts/
 tests/
 dist/
@@ -80,6 +80,6 @@ npm-debug.log*
 coverage/
 .nyc_output/
 
-# Rust build artifacts
+# Rust build artifacts (built on install, not published)
 target/
 **/*.rs.bk
