@@ -1,6 +1,6 @@
 [package]
 name = "locio"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "A powerful CLI tool to count lines and files in directories with extensive filtering options"
 authors = ["Toufiq Hasan Kiron <hello@kiron.dev>"]

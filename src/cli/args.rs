@@ -56,9 +56,6 @@ pub struct Args {
     #[arg(long = "max-depth", value_name = "DEPTH")]
     pub max_depth: Option<usize>,
 
-    #[arg(short = 'o', long = "output", value_enum, default_value = "human")]
-    pub output_format: OutputFormat,
-
     #[arg(long = "stats")]
     pub show_stats: bool,
 
@@ -76,6 +73,16 @@ pub struct Args {
 
     #[arg(short = 'q', long = "quiet")]
     pub quiet: bool,
+
+    #[arg(
+        long = "export",
+        value_enum,
+        num_args(0..=1),
+        default_missing_value = "human",
+        value_name = "FORMAT",
+        help = "Write report to locio-report.{ext} in the given format (human, json, csv, tsv)"
+    )]
+    pub export: Option<OutputFormat>,
 
     #[arg(short = 'v', long = "version", help = "Show version information")]
     pub version: bool,

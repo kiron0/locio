@@ -1,7 +1,7 @@
 use crate::cli::Args;
 use crate::core::Result;
 use crate::scanner::scan_directory;
-use crate::output::print_output;
+use crate::export::export_report;
 use clap::Parser;
 use std::process;
 
@@ -26,7 +26,7 @@ pub fn run() -> Result<()> {
     }
 
     let summary = scan_directory(&args)?;
-    print_output(&summary, &args);
+    export_report(&summary, &args);
 
     Ok(())
 }
