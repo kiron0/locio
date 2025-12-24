@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "A powerful CLI tool to count lines and files in directories with extensive filtering options",
   "bin": {
-    "lc": "target/release/lc",
+    "lc": "target/release/locio",
     "locio": "target/release/locio"
   },
   "scripts": {
