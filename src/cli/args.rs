@@ -20,10 +20,10 @@ pub struct Args {
     #[arg(short = 'e', long = "exclude", value_name = "PATTERN")]
     pub exclude_patterns: Vec<String>,
 
-    #[arg(long = "exclude-ext", value_name = "EXTENSIONS")]
+    #[arg(long = "exclude-ext", value_name = "EXTENSIONS", value_delimiter = ',')]
     pub exclude_extensions: Vec<String>,
 
-    #[arg(long = "include-ext", value_name = "EXTENSIONS")]
+    #[arg(long = "include-ext", value_name = "EXTENSIONS", value_delimiter = ',')]
     pub include_extensions: Vec<String>,
 
     #[arg(long = "exclude-dir", value_name = "PATTERN")]

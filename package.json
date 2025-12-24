@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "A powerful CLI tool to count lines and files in directories with extensive filtering options",
   "bin": {
+    "lc": "target/release/lc",
     "locio": "target/release/locio"
   },
   "scripts": {
@@ -25,7 +26,8 @@
   "author": "Toufiq Hasan Kiron <hello@kiron.dev>",
   "license": "MIT",
   "files": [
-    "target/release/locio"
+    "target/release/locio",
+    "target/release/lc"
   ],
   "repository": {
     "type": "git",

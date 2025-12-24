@@ -1,9 +1,16 @@
 use crate::cli::Args;
-use crate::core::{LineCounterError, Result};
+use crate::core::{ignored::DEFAULT_IGNORED_EXTENSIONS, LineCounterError, Result};
 use crate::utils;
 use regex::Regex;
 use std::fs;
 use std::path::Path;
+
+fn load_default_ignored_extensions() -> Vec<String> {
+    DEFAULT_IGNORED_EXTENSIONS
+        .iter()
+        .map(|ext| ext.to_lowercase())
+        .collect()
+}
 
 pub struct FilterPatterns {
     pub exclude_patterns: Vec<Regex>,
@@ -31,11 +38,16 @@ impl FilterPatterns {
             })
             .collect::<Result<Vec<_>>>()?;
 
-        let exclude_extensions: Vec<String> = args
+        let mut exclude_extensions: Vec<String> = args
             .exclude_extensions
             .iter()
             .map(|e| e.trim_start_matches('.').to_lowercase())
             .collect();
+
+        let default_ignored = load_default_ignored_extensions();
+        exclude_extensions.extend(default_ignored);
+        exclude_extensions.sort();
+        exclude_extensions.dedup();
 
         let include_extensions: Vec<String> = args
             .include_extensions
