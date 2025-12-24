@@ -10,7 +10,7 @@
 - **Multiple extensions** - comma-separated extension lists (e.g., `rs,ts,js`)
 - **Size filtering** - exclude files by minimum/maximum size
 - **Binary detection** - automatically exclude binary files
-- **Export reports** - save results as `locio-report.{txt,json,csv,tsv}` files
+- **Export reports** - save results as `LocIO-report.{txt,json,csv,tsv}` files
 - **Fast and efficient** - built with TypeScript
 - **Rich statistics** - detailed breakdown by file extension and directory
 
@@ -94,7 +94,5 @@ locio --stats --export json
 ```
 
 ---
-
-**[Visit the full documentation](https://locio.js.org) for complete CLI reference, examples, and tutorials.**
 
 _"LocIO: Count your code, not your worries."_
