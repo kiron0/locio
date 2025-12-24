@@ -1,5 +1,5 @@
 use crate::cli::Args;
-use crate::core::Result;
+use crate::core::{Result, FileDetail};
 use crate::core::filter::{FilterPatterns, should_exclude_file};
 use crate::core::Summary;
 use crate::utils;
@@ -71,11 +71,14 @@ pub fn scan_directory(args: &Args) -> Result<Summary> {
                 *summary.files_by_extension.entry(extension.clone()).or_insert(0) += 1;
                 *summary.size_by_extension.entry(extension.clone()).or_insert(0) += size;
 
+                let mut lines_opt: Option<usize> = None;
+
                 if !args.files_only {
                     match utils::count_lines(path, args.include_blank) {
                         Ok(lines) => {
+                            lines_opt = Some(lines);
                             summary.total_lines += lines;
-                            *summary.lines_by_extension.entry(extension).or_insert(0) += lines;
+                            *summary.lines_by_extension.entry(extension.clone()).or_insert(0) += lines;
                         }
                         Err(e) => {
                             if !args.quiet {
@@ -85,6 +88,24 @@ pub fn scan_directory(args: &Args) -> Result<Summary> {
                         }
                     }
                 }
+
+                let directory = path
+                    .parent()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_else(|| ".".to_string());
+
+                let name = path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| path.display().to_string());
+
+                summary.details.push(FileDetail {
+                    directory,
+                    name,
+                    extension,
+                    size,
+                    lines: lines_opt,
+                });
             }
             Err(e) => {
                 if !args.quiet {

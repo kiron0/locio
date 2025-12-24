@@ -1,5 +1,5 @@
 use crate::cli::{Args, OutputFormat};
-use crate::core::Summary;
+use crate::core::{Summary, FileDetail};
 use crate::utils;
 use colored::*;
 use serde_json::json;
@@ -13,6 +13,12 @@ pub fn print_human_output(summary: &Summary, args: &Args) {
     println!("\n{}", "=".repeat(60).bright_cyan());
     println!("{}", "LINE COUNTER RESULTS".bright_cyan().bold());
     println!("{}", "=".repeat(60).bright_cyan());
+
+    println!(
+        "\n{} {}",
+        "Directory:".bright_green().bold(),
+        args.directory.display()
+    );
 
     if !args.lines_only {
         println!(
@@ -29,6 +35,15 @@ pub fn print_human_output(summary: &Summary, args: &Args) {
             "Total Lines:".bright_green().bold(),
             summary.total_lines.to_string().bright_yellow()
         );
+    }
+
+    if !summary.files_by_extension.is_empty() {
+        let mut extensions: Vec<_> = summary.files_by_extension.keys().collect();
+        extensions.sort();
+
+        print!("\n{} ", "Extensions:".bright_green().bold());
+        let ext_list: Vec<String> = extensions.iter().map(|ext| ext.to_string()).collect();
+        println!("{}", ext_list.join(", ").bright_white());
     }
 
     if args.show_stats && !summary.files_by_extension.is_empty() {
@@ -61,11 +76,52 @@ pub fn print_human_output(summary: &Summary, args: &Args) {
         }
     }
 
+    if args.show_stats && !summary.details.is_empty() {
+        use std::collections::BTreeMap;
+
+        println!("\n{}", "Files by Directory:".bright_cyan().bold());
+        println!("{}", "-".repeat(60).bright_black());
+
+        let mut by_dir: BTreeMap<&str, Vec<&FileDetail>> = BTreeMap::new();
+        for detail in &summary.details {
+            by_dir
+                .entry(detail.directory.as_str())
+                .or_default()
+                .push(detail);
+        }
+
+        for (dir, files) in by_dir {
+            println!(
+                "{}",
+                format!("Directory: {}", dir).bright_green().bold()
+            );
+
+            for f in files {
+                let size_str = utils::format_size(f.size);
+                let lines_str = match f.lines {
+                    Some(l) if !args.files_only => format!(" | {} lines", l),
+                    _ => String::new(),
+                };
+
+                println!(
+                    "  - {} ({}, {}{})",
+                    f.name.bright_white(),
+                    f.extension.bright_blue(),
+                    size_str.bright_white(),
+                    lines_str
+                );
+            }
+
+            println!();
+        }
+    }
+
     println!();
 }
 
 pub fn print_json_output(summary: &Summary, args: &Args) {
     let mut output = json!({
+        "directory": args.directory.display().to_string(),
         "files": summary.total_files,
         "size": summary.total_size,
         "size_formatted": utils::format_size(summary.total_size),
@@ -91,6 +147,7 @@ pub fn print_json_output(summary: &Summary, args: &Args) {
 }
 
 pub fn print_csv_output(summary: &Summary, _args: &Args) {
+    println!("# Directory,{}", _args.directory.display());
     println!("Extension,Files,Lines,Size");
     for (ext, count) in &summary.files_by_extension {
         let lines = summary.lines_by_extension.get(ext).copied().unwrap_or(0);
@@ -100,6 +157,7 @@ pub fn print_csv_output(summary: &Summary, _args: &Args) {
 }
 
 pub fn print_tsv_output(summary: &Summary, _args: &Args) {
+    println!("# Directory\t{}", _args.directory.display());
     println!("Extension\tFiles\tLines\tSize");
     for (ext, count) in &summary.files_by_extension {
         let lines = summary.lines_by_extension.get(ext).copied().unwrap_or(0);

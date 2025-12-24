@@ -6,12 +6,13 @@
     "locio": "target/release/locio"
   },
   "scripts": {
-          "start": "./target/release/locio",
-          "build": "source $HOME/.cargo/env && cargo build --release",
-          "prepublishOnly": "npm run build",
-          "version:check": "./scripts/version.sh",
-          "version:update": "./scripts/npm-version.sh"
-        },
+    "start": "./target/release/locio",
+    "build": "source $HOME/.cargo/env && cargo build --release",
+    "prepublishOnly": "npm run build",
+    "version:check": "./scripts/version.sh",
+    "version:update": "./scripts/npm-version.sh",
+    "format": "npx prettier --write \"**/*.{js,json,ts,md}\""
+  },
   "keywords": [
     "cli",
     "locio",
@@ -30,6 +31,5 @@
     "type": "git",
     "url": "https://github.com/kiron0/locio.git"
   },
-  "homepage": "https://github.com/kiron0/locio#readme",
-  "dependencies": {}
+  "homepage": "https://github.com/kiron0/locio#readme"
 }

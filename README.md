@@ -38,6 +38,7 @@ locio --include-ext .rs --stats
 **📖 [Full Documentation Available Here](https://github.com/kiron0/locio#readme)**
 
 The documentation includes:
+
 - Complete CLI reference
 - All filtering options and patterns
 - Advanced examples and use cases
@@ -86,4 +87,4 @@ locio --stats --output json > stats.json
 
 **📖 [Visit the full documentation](https://github.com/kiron0/locio#readme) for complete CLI reference, examples, and tutorials.**
 
-*"Locio: Count your code, not your worries."* 📊
+_"Locio: Count your code, not your worries."_ 📊
