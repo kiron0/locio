@@ -1,11 +1,14 @@
-# Rust build artifacts
-/target/
-**/*.rs.bk
-Cargo.lock
-
-# Examples and test files
+# TypeScript build output
 dist/
-scripts/
+*.tsbuildinfo
+
+# Node.js
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+bun.lockb
+bun.lock
 
 # Environment variables
 .env
@@ -29,9 +32,6 @@ scripts/
 .Trashes
 ehthumbs.db
 Thumbs.db
-
-# Scripts
-scripts/
 
 # Logs
 logs
@@ -69,10 +69,5 @@ coverage/
 *.tmp
 *.temp
 
-# Node.js specific (kept for compatibility)
-node_modules/
-package-lock.json
-yarn.lock
-pnpm-lock.yaml
-bun.lockb
-bun.lock
+# Report files
+locio-report.*

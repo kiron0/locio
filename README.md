@@ -1,4 +1,4 @@
-# Locio
+# LocIO
 
 **A powerful CLI tool to count lines and files in directories with extensive filtering options.**
 
@@ -11,12 +11,20 @@
 - **Size filtering** - exclude files by minimum/maximum size
 - **Binary detection** - automatically exclude binary files
 - **Export reports** - save results as `locio-report.{txt,json,csv,tsv}` files
-- **Fast and efficient** - built with Rust
+- **Fast and efficient** - built with TypeScript
 - **Rich statistics** - detailed breakdown by file extension and directory
 
 ## Quick Start
 
 ### Installation
+
+### Run with npx (no global install)
+
+```bash
+npx locio@latest
+```
+
+### Install globally with npm
 
 ```bash
 npm install -g locio
@@ -31,8 +39,8 @@ locio
 # Count in specific directory
 locio /path/to/directory
 
-# Count only Rust files (dot is optional: .rs or rs both work)
-locio --include-ext rs --stats
+# Count only TypeScript files (dot is optional: .ts or ts both work)
+locio --include-ext ts,tsx --stats
 ```
 
 ## Documentation
@@ -72,8 +80,8 @@ locio --stats --export json
 ## Quick Example
 
 ```bash
-# Count Rust source files with statistics
-locio --include-ext rs --stats
+# Count TypeScript source files with statistics
+locio --include-ext ts,tsx --stats
 
 # Count TypeScript files excluding node_modules (multiple extensions supported)
 locio --include-ext ts,tsx --exclude-dir node_modules
@@ -81,7 +89,7 @@ locio --include-ext ts,tsx --exclude-dir node_modules
 # Count with size limits and binary exclusion
 locio --max-size 5MB --no-binary --stats
 
-# Export JSON report (writes to locio-report.json)
+# Export JSON report (writes to LocIO-report.json)
 locio --stats --export json
 ```
 
@@ -89,4 +97,4 @@ locio --stats --export json
 
 **[Visit the full documentation](https://locio.js.org) for complete CLI reference, examples, and tutorials.**
 
-_"Locio: Count your code, not your worries."_
+_"LocIO: Count your code, not your worries."_
