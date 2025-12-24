@@ -2,6 +2,7 @@ use crate::cli::Args;
 use crate::core::Result;
 use crate::scanner::scan_directory;
 use crate::output::print_output;
+use clap::Parser;
 use std::process;
 
 pub fn run() -> Result<()> {

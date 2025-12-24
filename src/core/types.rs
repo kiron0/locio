@@ -1,13 +1,4 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
-
-#[derive(Debug, Clone)]
-pub struct FileStats {
-    pub path: PathBuf,
-    pub lines: usize,
-    pub size: u64,
-    pub extension: Option<String>,
-}
 
 #[derive(Debug)]
 pub struct Summary {

@@ -16,9 +16,6 @@ pub enum LineCounterError {
 
     #[error("Not a directory: {0}")]
     NotADirectory(String),
-
-    #[error("Scan error: {0}")]
-    ScanError(String),
 }
 
 pub type Result<T> = std::result::Result<T, LineCounterError>;
