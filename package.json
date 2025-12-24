@@ -5,8 +5,7 @@
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "locio": "./dist/index.js",
-    "lc": "./dist/index.js"
+    "locio": "./dist/index.js"
   },
   "scripts": {
     "build": "rm -rf dist && tsup",
