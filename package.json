@@ -27,11 +27,13 @@
   "license": "MIT",
   "files": [
     "target/release/locio",
-    "target/release/lc"
+    "target/release/lc",
+    "README.md",
+    "LICENSE"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/kiron0/locio.git"
   },
-  "homepage": "https://github.com/kiron0/locio#readme"
+  "homepage": "https://locio.js.org"
 }

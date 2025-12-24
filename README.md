@@ -10,7 +10,7 @@
 - **Multiple extensions** - comma-separated extension lists (e.g., `rs,ts,js`)
 - **Size filtering** - exclude files by minimum/maximum size
 - **Binary detection** - automatically exclude binary files
-- **Multiple formats** - human-readable, JSON, CSV, TSV
+- **Export reports** - save results as `locio-report.{txt,json,csv,tsv}` files
 - **Fast and efficient** - built with Rust
 - **Rich statistics** - detailed breakdown by file extension and directory
 
@@ -37,14 +37,14 @@ locio --include-ext rs --stats
 
 ## Documentation
 
-**[Full Documentation Available Here](https://github.com/kiron0/locio#readme)**
+**[Full Documentation Available Here](https://locio.js.org)**
 
 The documentation includes:
 
 - Complete CLI reference
 - All filtering options and patterns
 - Advanced examples and use cases
-- Output format specifications
+- Export format specifications (JSON, CSV, TSV)
 - Best practices and tips
 
 ## Basic CLI Usage
@@ -65,8 +65,8 @@ locio --exclude ".*\.log$" --exclude-dir node_modules
 # Include only specific extensions (comma-separated, dots optional)
 locio --include-ext rs,ts,js --stats
 
-# Output in JSON format
-locio --output json
+# Export report in JSON format
+locio --stats --export json
 ```
 
 ## Quick Example
@@ -81,12 +81,12 @@ locio --include-ext ts,tsx --exclude-dir node_modules
 # Count with size limits and binary exclusion
 locio --max-size 5MB --no-binary --stats
 
-# Count with JSON output
-locio --stats --output json > stats.json
+# Export JSON report (writes to locio-report.json)
+locio --stats --export json
 ```
 
 ---
 
-**[Visit the full documentation](https://github.com/kiron0/locio#readme) for complete CLI reference, examples, and tutorials.**
+**[Visit the full documentation](https://locio.js.org) for complete CLI reference, examples, and tutorials.**
 
 _"Locio: Count your code, not your worries."_
