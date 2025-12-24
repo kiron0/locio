@@ -77,7 +77,7 @@ pub struct Args {
     #[arg(short = 'q', long = "quiet")]
     pub quiet: bool,
 
-    #[arg(long = "version")]
+    #[arg(short = 'v', long = "version", help = "Show version information")]
     pub version: bool,
 }
 

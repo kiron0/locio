@@ -4,6 +4,15 @@ use crate::utils;
 use colored::*;
 use serde_json::json;
 
+fn display_directory(args: &Args) -> String {
+    let dir = args.directory.display().to_string();
+    if dir == "." {
+        "current".to_string()
+    } else {
+        dir
+    }
+}
+
 pub fn print_human_output(summary: &Summary, args: &Args) {
     if args.quiet {
         println!("{} {}", summary.total_files, summary.total_lines);
@@ -17,7 +26,7 @@ pub fn print_human_output(summary: &Summary, args: &Args) {
     println!(
         "\n{} {}",
         "Directory:".bright_green().bold(),
-        args.directory.display()
+        display_directory(args)
     );
 
     if !args.lines_only {
@@ -121,7 +130,7 @@ pub fn print_human_output(summary: &Summary, args: &Args) {
 
 pub fn print_json_output(summary: &Summary, args: &Args) {
     let mut output = json!({
-        "directory": args.directory.display().to_string(),
+        "directory": display_directory(args),
         "files": summary.total_files,
         "size": summary.total_size,
         "size_formatted": utils::format_size(summary.total_size),
@@ -147,7 +156,7 @@ pub fn print_json_output(summary: &Summary, args: &Args) {
 }
 
 pub fn print_csv_output(summary: &Summary, _args: &Args) {
-    println!("# Directory,{}", _args.directory.display());
+    println!("# Directory,{}", display_directory(_args));
     println!("Extension,Files,Lines,Size");
     for (ext, count) in &summary.files_by_extension {
         let lines = summary.lines_by_extension.get(ext).copied().unwrap_or(0);
@@ -157,7 +166,7 @@ pub fn print_csv_output(summary: &Summary, _args: &Args) {
 }
 
 pub fn print_tsv_output(summary: &Summary, _args: &Args) {
-    println!("# Directory\t{}", _args.directory.display());
+    println!("# Directory\t{}", display_directory(_args));
     println!("Extension\tFiles\tLines\tSize");
     for (ext, count) in &summary.files_by_extension {
         let lines = summary.lines_by_extension.get(ext).copied().unwrap_or(0);
