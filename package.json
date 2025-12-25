@@ -1,6 +1,6 @@
 {
   "name": "locio",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A powerful CLI tool to count lines and files in directories with extensive filtering options",
   "type": "module",
   "main": "dist/index.js",
@@ -8,6 +8,7 @@
     "locio": "./dist/index.js"
   },
   "scripts": {
+    "start": "node dist/index.js",
     "build": "rm -rf dist && tsup",
     "build:watch": "tsup --watch",
     "format": "prettier --write \"**/*.{js,json,ts,md}\""
