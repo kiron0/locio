@@ -456,10 +456,7 @@ function findCommentInLine(
   return null;
 }
 
-export function countLinesWithComments(
-  filePath: string,
-  includeBlank: boolean,
-): CommentStats | null {
+export function countLinesWithComments(filePath: string): CommentStats | null {
   try {
     const contents = fs.readFileSync(filePath, "utf-8");
     const lines = contents.split(/\r?\n/);
@@ -480,13 +477,11 @@ export function countLinesWithComments(
       const trimmed = line.trim();
 
       if (trimmed.length === 0) {
-        blankLines++;
         if (inMultiLineComment) {
           commentLines++;
           fullLineComments++;
-        }
-        if (includeBlank) {
-          totalLines++;
+        } else {
+          blankLines++;
         }
         continue;
       }
@@ -528,7 +523,7 @@ export function countLinesWithComments(
     }
 
     return {
-      totalLines: includeBlank ? totalLines : totalLines - blankLines,
+      totalLines,
       codeLines,
       commentLines,
       fullLineComments,

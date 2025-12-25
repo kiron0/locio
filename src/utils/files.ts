@@ -54,19 +54,39 @@ export function isBinaryFile(filePath: string): boolean {
   }
 }
 
-export function countLines(
-  filePath: string,
-  includeBlank: boolean,
-): number | LineCounterError {
+export function countLines(filePath: string): number | LineCounterError {
   try {
     const contents = fs.readFileSync(filePath, "utf-8");
     const lines = contents.split(/\r?\n/);
 
-    if (includeBlank) {
-      return lines.length;
-    } else {
-      return lines.filter((line) => line.trim().length > 0).length;
+    return lines.length;
+  } catch (e) {
+    return LineCounterError.io(
+      `Failed to read file: ${filePath}`,
+      e instanceof Error ? e : undefined,
+    );
+  }
+}
+
+export function countLinesWithBlank(
+  filePath: string,
+): { total: number; blank: number; code: number } | LineCounterError {
+  try {
+    const contents = fs.readFileSync(filePath, "utf-8");
+    const lines = contents.split(/\r?\n/);
+
+    let blank = 0;
+    let code = 0;
+
+    for (const line of lines) {
+      if (line.trim().length === 0) {
+        blank++;
+      } else {
+        code++;
+      }
     }
+
+    return { total: lines.length, blank, code };
   } catch (e) {
     return LineCounterError.io(
       `Failed to read file: ${filePath}`,

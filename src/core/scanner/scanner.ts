@@ -16,6 +16,7 @@ import type { Summary } from "../types.js";
 import { createSummary } from "../types.js";
 import {
   checkMaxDepth,
+  createCommentStats,
   createFileDetail,
   getFileMetadata,
   normalizeExtension,
@@ -160,12 +161,14 @@ function processFile(
   let codeLinesOpt: number | null = null;
   let fullLineCommentsOpt: number | null = null;
   let inlineCommentsOpt: number | null = null;
+  let blankLinesOpt: number | null = null;
   let commentStats: {
     totalLines: number;
     commentLines: number;
     codeLines: number;
     fullLineComments: number;
     inlineComments: number;
+    blankLines: number;
   } | null = null;
 
   if (!args.files_only) {
@@ -183,16 +186,9 @@ function processFile(
       codeLinesOpt = statsResult.codeLines;
       fullLineCommentsOpt = statsResult.fullLineComments;
       inlineCommentsOpt = statsResult.inlineComments;
+      blankLinesOpt = statsResult.blankLines;
 
-      if (statsResult.commentLines !== null) {
-        commentStats = {
-          totalLines: statsResult.lines || 0,
-          commentLines: statsResult.commentLines,
-          codeLines: statsResult.codeLines || 0,
-          fullLineComments: statsResult.fullLineComments || 0,
-          inlineComments: statsResult.inlineComments || 0,
-        };
-      }
+      commentStats = createCommentStats(statsResult);
     }
   }
 
@@ -208,6 +204,7 @@ function processFile(
       codeLinesOpt,
       fullLineCommentsOpt,
       inlineCommentsOpt,
+      blankLinesOpt,
     ),
   );
 
@@ -269,7 +266,7 @@ export function scanDirectory(args: Args): Summary | LineCounterError {
 
   const ig = buildIgnoreInstance(args.directory);
 
-  const globPattern = path.join(args.directory, "**/*");
+  const globPattern = "**/*";
   const options: any = {
     cwd: args.directory,
     absolute: true,
@@ -393,12 +390,14 @@ export function scanDirectory(args: Args): Summary | LineCounterError {
       let codeLinesOpt: number | null = null;
       let fullLineCommentsOpt: number | null = null;
       let inlineCommentsOpt: number | null = null;
+      let blankLinesOpt: number | null = null;
       let commentStats: {
         totalLines: number;
         commentLines: number;
         codeLines: number;
         fullLineComments: number;
         inlineComments: number;
+        blankLines: number;
       } | null = null;
 
       if (!args.files_only) {
@@ -416,16 +415,9 @@ export function scanDirectory(args: Args): Summary | LineCounterError {
           codeLinesOpt = statsResult.codeLines;
           fullLineCommentsOpt = statsResult.fullLineComments;
           inlineCommentsOpt = statsResult.inlineComments;
+          blankLinesOpt = statsResult.blankLines;
 
-          if (statsResult.commentLines !== null) {
-            commentStats = {
-              totalLines: statsResult.lines || 0,
-              commentLines: statsResult.commentLines,
-              codeLines: statsResult.codeLines || 0,
-              fullLineComments: statsResult.fullLineComments || 0,
-              inlineComments: statsResult.inlineComments || 0,
-            };
-          }
+          commentStats = createCommentStats(statsResult);
         }
       }
 
@@ -441,6 +433,7 @@ export function scanDirectory(args: Args): Summary | LineCounterError {
           codeLinesOpt,
           fullLineCommentsOpt,
           inlineCommentsOpt,
+          blankLinesOpt,
         ),
       );
     }

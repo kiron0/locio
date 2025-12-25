@@ -35,8 +35,12 @@ function formatCommentsText(
   commentLines: number,
   fullLineComments: number,
   inlineComments: number,
+  blankLines?: number,
 ): string {
   let result = ` (${codeLines} code, ${commentLines} comments`;
+  if (blankLines !== undefined && blankLines > 0) {
+    result += `, ${blankLines} blank`;
+  }
   if (fullLineComments > 0 || inlineComments > 0) {
     result += `: ${fullLineComments} full-line, ${inlineComments} inline`;
   }
@@ -49,8 +53,12 @@ function formatCommentsChalk(
   commentLines: number,
   fullLineComments: number,
   inlineComments: number,
+  blankLines?: number,
 ): string {
   let result = ` ${chalk.gray(`(${chalk.blue(codeLines)} code, ${chalk.cyan(commentLines)} comments`)}`;
+  if (blankLines !== undefined && blankLines > 0) {
+    result += chalk.gray(`, ${chalk.gray(blankLines)} blank`);
+  }
   if (fullLineComments > 0 || inlineComments > 0) {
     result += chalk.gray(
       `: ${chalk.yellow(fullLineComments)} full-line, ${chalk.magenta(inlineComments)} inline`,
@@ -211,6 +219,12 @@ function buildHumanReport(summary: Summary, args: Args): string {
       if (summary.total_code_lines !== undefined) {
         out += `Total Code Lines: ${summary.total_code_lines}\n`;
       }
+      if (
+        summary.total_blank_lines !== undefined &&
+        summary.total_blank_lines > 0
+      ) {
+        out += `Total Blank Lines: ${summary.total_blank_lines}\n`;
+      }
       if (args.code_vs_comments && summary.total_code_lines !== undefined) {
         const ratio =
           summary.total_code_lines > 0
@@ -260,11 +274,13 @@ function buildHumanReport(summary: Summary, args: Args): string {
               summary.full_line_comments_by_extension?.[ext] || 0,
             inline_comments: summary.inline_comments_by_extension?.[ext] || 0,
           });
+          const blankLines = summary.blank_lines_by_extension?.[ext] || 0;
           out += formatCommentsText(
             stats.codeLines,
             stats.commentLines,
             stats.fullLineComments,
             stats.inlineComments,
+            blankLines,
           );
           if (args.code_vs_comments && stats.codeLines > 0) {
             const ratio = (stats.commentLines / stats.codeLines).toFixed(2);
@@ -305,6 +321,7 @@ function buildHumanReport(summary: Summary, args: Args): string {
             stats.commentLines,
             stats.fullLineComments,
             stats.inlineComments,
+            f.blank_lines || undefined,
           );
         }
 
@@ -398,6 +415,14 @@ function humanReport(summary: Summary, args: Args): void {
           `\n${chalk.green.bold("Total Code Lines:")} ${chalk.blue(summary.total_code_lines)}`,
         );
       }
+      if (
+        summary.total_blank_lines !== undefined &&
+        summary.total_blank_lines > 0
+      ) {
+        console.log(
+          `\n${chalk.green.bold("Total Blank Lines:")} ${chalk.gray(summary.total_blank_lines)}`,
+        );
+      }
       if (args.code_vs_comments && summary.total_code_lines !== undefined) {
         const ratio =
           summary.total_code_lines > 0
@@ -451,11 +476,13 @@ function humanReport(summary: Summary, args: Args): void {
               summary.full_line_comments_by_extension?.[ext] || 0,
             inline_comments: summary.inline_comments_by_extension?.[ext] || 0,
           });
+          const blankLines = summary.blank_lines_by_extension?.[ext] || 0;
           line += formatCommentsChalk(
             stats.codeLines,
             stats.commentLines,
             stats.fullLineComments,
             stats.inlineComments,
+            blankLines,
           );
           if (args.code_vs_comments && stats.codeLines > 0) {
             const ratio = (stats.commentLines / stats.codeLines).toFixed(2);
@@ -496,6 +523,7 @@ function humanReport(summary: Summary, args: Args): void {
             stats.commentLines,
             stats.fullLineComments,
             stats.inlineComments,
+            f.blank_lines || undefined,
           );
         }
 
@@ -564,6 +592,7 @@ function buildJsonOutput(summary: Summary, args: Args): string {
     if (args.comments) {
       output.comment_lines = summary.total_comment_lines || 0;
       output.code_lines = summary.total_code_lines || 0;
+      output.blank_lines = summary.total_blank_lines || 0;
       output.full_line_comments = summary.total_full_line_comments || 0;
       output.inline_comments = summary.total_inline_comments || 0;
       if (args.code_vs_comments && summary.total_code_lines !== undefined) {
@@ -591,6 +620,7 @@ function buildJsonOutput(summary: Summary, args: Args): string {
         stats[ext].comment_lines =
           summary.comment_lines_by_extension?.[ext] || 0;
         stats[ext].code_lines = summary.code_lines_by_extension?.[ext] || 0;
+        stats[ext].blank_lines = summary.blank_lines_by_extension?.[ext] || 0;
         stats[ext].full_line_comments =
           summary.full_line_comments_by_extension?.[ext] || 0;
         stats[ext].inline_comments =
@@ -645,7 +675,7 @@ function buildCsvOutput(summary: Summary, args: Args): string {
     out += `# Project Type,${formatProjectType(projectType)}\n`;
   }
   if (args.comments) {
-    out += "Extension,Files,Lines,Code Lines,Comment Lines,Size";
+    out += "Extension,Files,Lines,Code Lines,Comment Lines,Blank Lines,Size";
     if (args.code_vs_comments) {
       out += ",Code vs Comments Ratio";
     }
@@ -655,8 +685,9 @@ function buildCsvOutput(summary: Summary, args: Args): string {
       const lines = summary.lines_by_extension[ext] || 0;
       const codeLines = summary.code_lines_by_extension?.[ext] || 0;
       const commentLines = summary.comment_lines_by_extension?.[ext] || 0;
+      const blankLines = summary.blank_lines_by_extension?.[ext] || 0;
       const size = summary.size_by_extension[ext] || 0;
-      out += `${ext},${count},${lines},${codeLines},${commentLines},${size}`;
+      out += `${ext},${count},${lines},${codeLines},${commentLines},${blankLines},${size}`;
       if (args.code_vs_comments && codeLines > 0) {
         const ratio = ((commentLines || 0) / codeLines).toFixed(2);
         out += `,${ratio}`;
@@ -682,7 +713,8 @@ function buildTsvOutput(summary: Summary, args: Args): string {
     out += `# Project Type\t${formatProjectType(projectType)}\n`;
   }
   if (args.comments) {
-    out += "Extension\tFiles\tLines\tCode Lines\tComment Lines\tSize";
+    out +=
+      "Extension\tFiles\tLines\tCode Lines\tComment Lines\tBlank Lines\tSize";
     if (args.code_vs_comments) {
       out += "\tCode vs Comments Ratio";
     }
@@ -692,8 +724,9 @@ function buildTsvOutput(summary: Summary, args: Args): string {
       const lines = summary.lines_by_extension[ext] || 0;
       const codeLines = summary.code_lines_by_extension?.[ext] || 0;
       const commentLines = summary.comment_lines_by_extension?.[ext] || 0;
+      const blankLines = summary.blank_lines_by_extension?.[ext] || 0;
       const size = summary.size_by_extension[ext] || 0;
-      out += `${ext}\t${count}\t${lines}\t${codeLines}\t${commentLines}\t${size}`;
+      out += `${ext}\t${count}\t${lines}\t${codeLines}\t${commentLines}\t${blankLines}\t${size}`;
       if (args.code_vs_comments && codeLines > 0) {
         const ratio = ((commentLines || 0) / codeLines).toFixed(2);
         out += `\t${ratio}`;
@@ -733,6 +766,12 @@ function buildMarkdownOutput(summary: Summary, args: Args): string {
       md += `| Comment Lines | ${summary.total_comment_lines} |\n`;
       if (summary.total_code_lines !== undefined) {
         md += `| Code Lines | ${summary.total_code_lines} |\n`;
+      }
+      if (
+        summary.total_blank_lines !== undefined &&
+        summary.total_blank_lines > 0
+      ) {
+        md += `| Blank Lines | ${summary.total_blank_lines} |\n`;
       }
       if (
         args.code_vs_comments &&
@@ -817,7 +856,7 @@ function buildMarkdownOutput(summary: Summary, args: Args): string {
       if (!args.files_only) {
         md += ` Lines |`;
         if (args.comments || args.show_stats) {
-          md += ` Code | Comments | Full-Line | Inline |`;
+          md += ` Code | Comments | Blank | Full-Line | Inline |`;
         }
       }
       md += `\n`;
@@ -825,7 +864,7 @@ function buildMarkdownOutput(summary: Summary, args: Args): string {
       if (!args.files_only) {
         md += `-------|`;
         if (args.comments || args.show_stats) {
-          md += `------|----------|----------|--------|`;
+          md += `------|----------|-------|----------|--------|`;
         }
       }
       md += `\n`;
@@ -837,9 +876,10 @@ function buildMarkdownOutput(summary: Summary, args: Args): string {
           if (args.comments || args.show_stats) {
             const codeLines = f.code_lines || 0;
             const commentLines = f.comment_lines || 0;
+            const blankLines = f.blank_lines || 0;
             const fullLineComments = f.full_line_comments || 0;
             const inlineComments = f.inline_comments || 0;
-            md += ` ${codeLines} | ${commentLines} | ${fullLineComments} | ${inlineComments} |`;
+            md += ` ${codeLines} | ${commentLines} | ${blankLines} | ${fullLineComments} | ${inlineComments} |`;
           }
         }
         md += `\n`;
@@ -910,6 +950,7 @@ function buildHtmlOutput(summary: Summary, args: Args): string {
     size: summary.size_by_extension[ext] || 0,
     codeLines: summary.code_lines_by_extension?.[ext] || 0,
     commentLines: summary.comment_lines_by_extension?.[ext] || 0,
+    blankLines: summary.blank_lines_by_extension?.[ext] || 0,
   }));
 
   const html = `<!DOCTYPE html>
@@ -1062,7 +1103,16 @@ function buildHtmlOutput(summary: Summary, args: Args): string {
         <div class="card">
           <h3>Code Lines</h3>
           <div class="value">${summary.total_code_lines || 0}</div>
+        </div>
+        ${
+          summary.total_blank_lines !== undefined &&
+          summary.total_blank_lines > 0
+            ? `<div class="card">
+          <h3>Blank Lines</h3>
+          <div class="value">${summary.total_blank_lines}</div>
         </div>`
+            : ""
+        }`
             : ""
         }
       </div>
@@ -1081,7 +1131,7 @@ function buildHtmlOutput(summary: Summary, args: Args): string {
               <th>Files</th>
               ${!args.lines_only ? "<th>Size</th>" : ""}
               ${!args.files_only ? "<th>Lines</th>" : ""}
-              ${args.comments ? "<th>Code</th><th>Comments</th>" : ""}
+              ${args.comments ? "<th>Code</th><th>Comments</th><th>Blank</th>" : ""}
             </tr>
           </thead>
           <tbody>
@@ -1092,7 +1142,7 @@ function buildHtmlOutput(summary: Summary, args: Args): string {
               <td>${d.files}</td>
               ${!args.lines_only ? `<td>${formatSize(d.size)}</td>` : ""}
               ${!args.files_only ? `<td>${d.lines}</td>` : ""}
-              ${args.comments ? `<td>${d.codeLines}</td><td>${d.commentLines}</td>` : ""}
+              ${args.comments ? `<td>${d.codeLines}</td><td>${d.commentLines}</td><td>${d.blankLines}</td>` : ""}
             </tr>`,
               )
               .join("")}

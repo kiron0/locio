@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import type { Args } from "../../cli/args.js";
-import { countLines } from "../../utils/files.js";
+import { countLines, countLinesWithBlank } from "../../utils/files.js";
 import { countLinesWithComments } from "../../utils/formatting/index.js";
 import { LineCounterError, isError } from "../errors.js";
 import { DEFAULT_RM_COMMENTS_IGNORED_EXTENSIONS } from "../filter/index.js";
@@ -9,6 +9,39 @@ import type { Summary } from "../types.js";
 
 export function normalizeExtension(filePath: string): string {
   return path.extname(filePath).replace(/^\./, "").toLowerCase() || "no-ext";
+}
+
+export function createCommentStats(statsResult: {
+  lines: number | null;
+  commentLines: number | null;
+  codeLines: number | null;
+  fullLineComments: number | null;
+  inlineComments: number | null;
+  blankLines: number | null;
+}): {
+  totalLines: number;
+  commentLines: number;
+  codeLines: number;
+  fullLineComments: number;
+  inlineComments: number;
+  blankLines: number;
+} | null {
+  const hasCommentData = statsResult.commentLines !== null;
+  const hasBreakdownData =
+    statsResult.codeLines !== null && statsResult.blankLines !== null;
+
+  if (hasCommentData || hasBreakdownData) {
+    return {
+      totalLines: statsResult.lines || 0,
+      commentLines: statsResult.commentLines || 0,
+      codeLines: statsResult.codeLines || 0,
+      fullLineComments: statsResult.fullLineComments || 0,
+      inlineComments: statsResult.inlineComments || 0,
+      blankLines: statsResult.blankLines || 0,
+    };
+  }
+
+  return null;
 }
 
 export function updateSummaryWithFile(
@@ -22,6 +55,7 @@ export function updateSummaryWithFile(
     codeLines: number;
     fullLineComments: number;
     inlineComments: number;
+    blankLines: number;
   } | null,
 ): void {
   summary.total_files += 1;
@@ -37,10 +71,20 @@ export function updateSummaryWithFile(
   }
 
   if (commentStats) {
+    const expectedTotal =
+      commentStats.codeLines +
+      commentStats.commentLines +
+      commentStats.blankLines;
+    if (commentStats.totalLines !== expectedTotal) {
+      commentStats.totalLines = expectedTotal;
+    }
+
     summary.total_comment_lines =
       (summary.total_comment_lines || 0) + commentStats.commentLines;
     summary.total_code_lines =
       (summary.total_code_lines || 0) + commentStats.codeLines;
+    summary.total_blank_lines =
+      (summary.total_blank_lines || 0) + commentStats.blankLines;
     summary.total_full_line_comments =
       (summary.total_full_line_comments || 0) + commentStats.fullLineComments;
     summary.total_inline_comments =
@@ -51,6 +95,11 @@ export function updateSummaryWithFile(
       commentStats.commentLines;
     summary.code_lines_by_extension![ext] =
       (summary.code_lines_by_extension![ext] || 0) + commentStats.codeLines;
+    if (!summary.blank_lines_by_extension) {
+      summary.blank_lines_by_extension = {};
+    }
+    summary.blank_lines_by_extension[ext] =
+      (summary.blank_lines_by_extension[ext] || 0) + commentStats.blankLines;
     summary.full_line_comments_by_extension![ext] =
       (summary.full_line_comments_by_extension![ext] || 0) +
       commentStats.fullLineComments;
@@ -69,53 +118,76 @@ export function processFileStatistics(
   codeLines: number | null;
   fullLineComments: number | null;
   inlineComments: number | null;
+  blankLines: number | null;
   error: LineCounterError | null;
 } {
-  let lines: number | null = null;
-  let commentLines: number | null = null;
-  let codeLines: number | null = null;
-  let fullLineComments: number | null = null;
-  let inlineComments: number | null = null;
-  let error: LineCounterError | null = null;
-
   const ext = path.extname(filePath).replace(/^\./, "").toLowerCase();
   const ignoredExts = DEFAULT_RM_COMMENTS_IGNORED_EXTENSIONS.map((e) =>
     e.toLowerCase(),
   );
   const shouldSkipComments = ignoredExts.includes(ext);
 
-  if (args.comments && !shouldSkipComments) {
-    const commentStats = countLinesWithComments(filePath, args.include_blank);
-    if (commentStats) {
-      lines = commentStats.totalLines;
-      commentLines = commentStats.commentLines;
-      codeLines = commentStats.codeLines;
-      fullLineComments = commentStats.fullLineComments;
-      inlineComments = commentStats.inlineComments;
-    } else {
-      const lineCount = countLines(filePath, args.include_blank);
-      if (isError(lineCount)) {
-        error = lineCount;
-      } else {
-        lines = lineCount;
+  if (args.comments) {
+    if (!shouldSkipComments) {
+      const commentStats = countLinesWithComments(filePath);
+      if (commentStats) {
+        return {
+          lines: commentStats.totalLines,
+          commentLines: commentStats.commentLines,
+          codeLines: commentStats.codeLines,
+          fullLineComments: commentStats.fullLineComments,
+          inlineComments: commentStats.inlineComments,
+          blankLines: commentStats.blankLines,
+          error: null,
+        };
       }
     }
-  } else {
-    const lineCount = countLines(filePath, args.include_blank);
+
+    const lineCount = countLinesWithBlank(filePath);
     if (isError(lineCount)) {
-      error = lineCount;
-    } else {
-      lines = lineCount;
+      return {
+        lines: null,
+        commentLines: null,
+        codeLines: null,
+        fullLineComments: null,
+        inlineComments: null,
+        blankLines: null,
+        error: lineCount,
+      };
     }
+
+    return {
+      lines: lineCount.total,
+      commentLines: 0,
+      codeLines: lineCount.code,
+      fullLineComments: 0,
+      inlineComments: 0,
+      blankLines: lineCount.blank,
+      error: null,
+    };
+  }
+
+  const lineCount = countLines(filePath);
+  if (isError(lineCount)) {
+    return {
+      lines: null,
+      commentLines: null,
+      codeLines: null,
+      fullLineComments: null,
+      inlineComments: null,
+      blankLines: null,
+      error: lineCount,
+    };
   }
 
   return {
-    lines,
-    commentLines,
-    codeLines,
-    fullLineComments,
-    inlineComments,
-    error,
+    lines: lineCount,
+    commentLines: null,
+    codeLines: null,
+    fullLineComments: null,
+    inlineComments: null,
+    blankLines: null,
+    error: null,
   };
 }
 
@@ -128,6 +200,7 @@ export function createFileDetail(
   codeLines: number | null,
   fullLineComments: number | null,
   inlineComments: number | null,
+  blankLines: number | null,
 ): {
   directory: string;
   name: string;
@@ -136,6 +209,7 @@ export function createFileDetail(
   lines: number | null;
   comment_lines?: number | null;
   code_lines?: number | null;
+  blank_lines?: number | null;
   full_line_comments?: number | null;
   inline_comments?: number | null;
 } {
@@ -147,6 +221,7 @@ export function createFileDetail(
     lines,
     comment_lines: commentLines,
     code_lines: codeLines,
+    blank_lines: blankLines,
     full_line_comments: fullLineComments,
     inline_comments: inlineComments,
   };

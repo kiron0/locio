@@ -34,7 +34,6 @@ export interface Args {
   max_depth?: number;
   show_stats: boolean;
   show_progress: boolean;
-  include_blank: boolean;
   no_binary: boolean;
   ignore_case: boolean;
   quiet: boolean;
@@ -99,8 +98,7 @@ export function createCommand(): Command {
     .option("--follow-links", "Follow symbolic links")
     .option("--max-depth <depth>", "Maximum directory depth", parseInt)
     .option("--stats", "Show detailed statistics")
-    .option("-p, --progress", "Show progress")
-    .option("--include-blank", "Include blank lines in count")
+    .option("--no-progress", "Disable progress indicator (enabled by default)")
     .option("--no-binary", "Exclude binary files")
     .option("-i, --ignore-case", "Case-insensitive pattern matching")
     .option("-q, --quiet", "Quiet mode (minimal output)")
@@ -113,7 +111,7 @@ export function createCommand(): Command {
       "Specify output directory for exported reports. Files will use default naming (LocIO-report.{ext}). Directories will be created automatically if they don't exist",
     )
     .option("-w, --watch", "Watch directory for changes and auto-rescan")
-    .option("--comments", "Count comment lines separately")
+    .option("--no-comments", "Disable comment counting (enabled by default)")
     .option(
       "--code-vs-comments",
       "Show code vs comments ratio (automatically enables --comments)",
@@ -164,8 +162,7 @@ export function parseArgs(): Args {
     follow_links: options.followLinks || false,
     max_depth: options.maxDepth,
     show_stats: options.stats || false,
-    show_progress: options.progress || false,
-    include_blank: options.includeBlank || false,
+    show_progress: options.noProgress !== true,
     no_binary: options.noBinary || false,
     ignore_case: options.ignoreCase || false,
     quiet: options.quiet || false,
@@ -173,8 +170,7 @@ export function parseArgs(): Args {
     export_path: options.exportPath,
     version: false,
     watch: options.watch || false,
-    comments:
-      options.comments || options.codeVsComments || options.stats || false,
+    comments: options.noComments !== true,
     code_vs_comments: options.codeVsComments || false,
     rm_comments: (() => {
       if (!options.rmComments) return false;
