@@ -48,8 +48,127 @@ export interface Args {
   top_dirs?: number;
 }
 
+function similarity(str1: string, str2: string): number {
+  const longer = str1.length > str2.length ? str1 : str2;
+  if (longer.length === 0) return 1.0;
+
+  const distance = levenshteinDistance(str1, str2);
+  return (longer.length - distance) / longer.length;
+}
+
+function levenshteinDistance(str1: string, str2: string): number {
+  const matrix: number[][] = [];
+  for (let i = 0; i <= str2.length; i++) {
+    matrix[i] = [i];
+  }
+  for (let j = 0; j <= str1.length; j++) {
+    matrix[0][j] = j;
+  }
+  for (let i = 1; i <= str2.length; i++) {
+    for (let j = 1; j <= str1.length; j++) {
+      if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1,
+        );
+      }
+    }
+  }
+  return matrix[str2.length][str1.length];
+}
+
+function findSimilarOptions(
+  unknownOption: string,
+  availableOptions: string[],
+  maxSuggestions: number = 3,
+): string[] {
+  const similarities = availableOptions.map((opt) => ({
+    option: opt,
+    score: similarity(unknownOption, opt),
+  }));
+
+  return similarities
+    .sort((a, b) => b.score - a.score)
+    .filter((item) => item.score > 0.3)
+    .slice(0, maxSuggestions)
+    .map((item) => item.option);
+}
+
 export function createCommand(): Command {
   const program = new Command();
+
+  const availableOptions = [
+    "files-only",
+    "lines-only",
+    "exclude",
+    "exclude-ext",
+    "include-ext",
+    "exclude-dir",
+    "include-dir",
+    "exclude-name",
+    "include-name",
+    "max-size",
+    "min-size",
+    "no-hidden",
+    "no-empty",
+    "follow-links",
+    "max-depth",
+    "stats",
+    "no-progress",
+    "no-binary",
+    "ignore-case",
+    "quiet",
+    "export",
+    "export-path",
+    "watch",
+    "no-comments",
+    "code-vs-comments",
+    "rm-comments",
+    "top-files",
+    "top-dirs",
+    "version",
+  ];
+
+  program.configureOutput({
+    writeErr: (str) => {
+      if (str.includes("unknown option")) {
+        const match = str.match(/unknown option ['"]--?([^'"]+)['"]/);
+        if (match) {
+          const unknownOption = match[1];
+
+          const similarOptions = findSimilarOptions(
+            unknownOption,
+            availableOptions,
+          );
+
+          if (similarOptions.length > 0) {
+            const suggestionsText =
+              similarOptions.length === 1
+                ? "Did you mean this?"
+                : "Did you mean one of these?";
+            process.stderr.write(
+              `\n❌ Unknown option: '--${unknownOption}'\n\n` +
+                `💡 ${suggestionsText}\n` +
+                similarOptions.map((opt) => `   • --${opt}`).join("\n") +
+                `\n\n` +
+                `Run 'locio --help' to see all available options.\n\n`,
+            );
+            process.exit(1);
+          }
+
+          process.stderr.write(
+            `\n❌ Unknown option: '--${unknownOption}'\n\n` +
+              `💡 This option doesn't exist. Run 'locio --help' to see all available options.\n\n`,
+          );
+          process.exit(1);
+        }
+      }
+      process.stderr.write(str);
+    },
+  });
 
   program
     .name("LocIO")
