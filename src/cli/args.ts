@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import pkg from "../../package.json";
+import { getPackageVersion } from "../utils/version.js";
 
 export enum OutputFormat {
   Human = "human",
@@ -41,7 +41,7 @@ export function createCommand(): Command {
   program
     .name("LocIO")
     .description("A powerful CLI tool to count lines and files in directories")
-    .version(pkg.version, "-v, --version", "Show version number")
+    .version(getPackageVersion(), "-v, --version", "Show version number")
     .argument("[directory]", "Directory to scan", ".")
     .option("-f, --files-only", "Count only files")
     .option("-l, --lines-only", "Count only lines")

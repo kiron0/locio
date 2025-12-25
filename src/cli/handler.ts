@@ -1,14 +1,14 @@
 import * as fs from "fs";
 import * as path from "path";
-import pkg from "../../package.json";
 import { LineCounterError, isError } from "../core/errors.js";
 import { exportReport } from "../core/export.js";
 import { scanDirectory } from "../core/scanner.js";
+import { getPackageVersion } from "../utils/version.js";
 import type { Args } from "./args.js";
 
 function run(args: Args): void | LineCounterError {
   if (args.version) {
-    console.log(`LocIO ${pkg.version}`);
+    console.log(`LocIO ${getPackageVersion()}`);
     return;
   }
 

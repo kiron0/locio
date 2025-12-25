@@ -2,13 +2,13 @@
 
 import * as process from "process";
 import * as readline from "readline";
-import pkg from "../package.json";
 import { createCommand, parseArgs } from "./cli/args.js";
 import { runWithExit } from "./cli/handler.js";
+import { getPackageVersion } from "./utils/version.js";
 
 function showInteractiveHome(): Promise<boolean> {
   return new Promise((resolve, reject) => {
-    const version = pkg.version;
+    const version = getPackageVersion();
 
     console.log("====================================");
     console.log(`           LocIO CLI v${version}`);
