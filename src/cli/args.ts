@@ -6,6 +6,8 @@ export enum OutputFormat {
   Json = "json",
   Csv = "csv",
   Tsv = "tsv",
+  Markdown = "markdown",
+  Html = "html",
 }
 
 export interface Args {
@@ -31,8 +33,14 @@ export interface Args {
   no_binary: boolean;
   ignore_case: boolean;
   quiet: boolean;
-  export?: OutputFormat;
+  export?: OutputFormat | OutputFormat[];
+  export_path?: string;
   version: boolean;
+  watch: boolean;
+  comments: boolean;
+  code_vs_comments: boolean;
+  top_files?: number;
+  top_dirs?: number;
 }
 
 export function createCommand(): Command {
@@ -102,7 +110,23 @@ export function createCommand(): Command {
     .option("-q, --quiet", "Quiet mode (minimal output)")
     .option(
       "--export [format]",
-      "Write report to LocIO-report.{ext} in the given format (human, json, csv, tsv)",
+      "Write report to LocIO-report.{ext} in the given format (human, json, csv, tsv, markdown, html). Multiple formats can be specified comma-separated (e.g., json,html,markdown)",
+    )
+    .option(
+      "--export-path <dir>",
+      "Specify output directory for exported reports. Files will use default naming (LocIO-report.{ext}). Directories will be created automatically if they don't exist",
+    )
+    .option("-w, --watch", "Watch directory for changes and auto-rescan")
+    .option("--comments", "Count comment lines separately")
+    .option(
+      "--code-vs-comments",
+      "Show code vs comments ratio (automatically enables --comments)",
+    )
+    .option("--top-files <n>", "Show top N largest files by size", parseInt)
+    .option(
+      "--top-dirs <n>",
+      "Show top N directories with most files",
+      parseInt,
     );
 
   return program;
@@ -145,18 +169,45 @@ export function parseArgs(): Args {
     no_binary: options.noBinary || false,
     ignore_case: options.ignoreCase || false,
     quiet: options.quiet || false,
-    export:
-      options.export !== undefined
-        ? options.export === true
-          ? OutputFormat.Human
-          : (options.export as string).toLowerCase() === "json"
-            ? OutputFormat.Json
-            : (options.export as string).toLowerCase() === "csv"
-              ? OutputFormat.Csv
-              : (options.export as string).toLowerCase() === "tsv"
-                ? OutputFormat.Tsv
-                : OutputFormat.Human
-        : undefined,
+    export: (() => {
+      if (options.export === undefined) {
+        return undefined;
+      }
+      if (options.export === true) {
+        return OutputFormat.Human;
+      }
+      const exportStr = options.export as string;
+      if (exportStr.includes(",")) {
+        const formats = exportStr
+          .split(",")
+          .map((f) => f.trim().toLowerCase())
+          .map((f) => {
+            if (f === "json") return OutputFormat.Json;
+            if (f === "csv") return OutputFormat.Csv;
+            if (f === "tsv") return OutputFormat.Tsv;
+            if (f === "markdown" || f === "md") return OutputFormat.Markdown;
+            if (f === "html") return OutputFormat.Html;
+            if (f === "human" || f === "txt") return OutputFormat.Human;
+            return null;
+          })
+          .filter((f): f is OutputFormat => f !== null);
+        return formats.length > 0 ? formats : undefined;
+      }
+      const lower = exportStr.toLowerCase();
+      if (lower === "json") return OutputFormat.Json;
+      if (lower === "csv") return OutputFormat.Csv;
+      if (lower === "tsv") return OutputFormat.Tsv;
+      if (lower === "markdown" || lower === "md") return OutputFormat.Markdown;
+      if (lower === "html") return OutputFormat.Html;
+      return OutputFormat.Human;
+    })(),
+    export_path: options.exportPath,
     version: false,
+    watch: options.watch || false,
+    comments:
+      options.comments || options.codeVsComments || options.stats || false,
+    code_vs_comments: options.codeVsComments || false,
+    top_files: options.topFiles,
+    top_dirs: options.topDirs,
   };
 }

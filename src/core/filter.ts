@@ -4,6 +4,11 @@ import type { Args } from "../cli/args.js";
 import { isBinaryFile, parseSize } from "../utils/files.js";
 import { LineCounterError } from "./errors.js";
 import { DEFAULT_IGNORED_EXTENSIONS } from "./ignored.js";
+import {
+  detectProjectType,
+  getProjectExcludes,
+  type ProjectType,
+} from "./project-type.js";
 
 function loadDefaultIgnoredExtensions(): string[] {
   return DEFAULT_IGNORED_EXTENSIONS.map((ext) => ext.toLowerCase());
@@ -17,12 +22,30 @@ export interface FilterPatterns {
   include_dirs: RegExp[];
   exclude_names: RegExp[];
   include_names: RegExp[];
+  detected_project_type?: ProjectType;
 }
 
 export function createFilterPatterns(
   args: Args,
 ): FilterPatterns | LineCounterError {
   try {
+    if (args.max_size) {
+      const maxSize = parseSize(args.max_size);
+      if (maxSize instanceof LineCounterError) {
+        return maxSize;
+      }
+    }
+
+    if (args.min_size) {
+      const minSize = parseSize(args.min_size);
+      if (minSize instanceof LineCounterError) {
+        return minSize;
+      }
+    }
+
+    const detectedProjectType = detectProjectType(args.directory);
+    const projectExcludes = getProjectExcludes(detectedProjectType);
+
     const exclude_patterns: RegExp[] = args.exclude_patterns.map((p) => {
       try {
         return new RegExp(p, args.ignore_case ? "i" : undefined);
@@ -36,6 +59,7 @@ export function createFilterPatterns(
 
     const exclude_extensions: string[] = [
       ...args.exclude_extensions.map((e) => e.replace(/^\./, "").toLowerCase()),
+      ...projectExcludes.exclude_extensions.map((e) => e.toLowerCase()),
       ...loadDefaultIgnoredExtensions(),
     ];
     const uniqueExcludeExt = Array.from(new Set(exclude_extensions)).sort();
@@ -44,7 +68,11 @@ export function createFilterPatterns(
       e.replace(/^\./, "").toLowerCase(),
     );
 
-    const exclude_dirs: RegExp[] = args.exclude_dirs.map((p) => {
+    const exclude_dirs_patterns: string[] = [
+      ...args.exclude_dirs,
+      ...projectExcludes.exclude_dirs,
+    ];
+    const exclude_dirs: RegExp[] = exclude_dirs_patterns.map((p) => {
       return new RegExp(p, args.ignore_case ? "i" : undefined);
     });
 
@@ -52,7 +80,11 @@ export function createFilterPatterns(
       return new RegExp(p, args.ignore_case ? "i" : undefined);
     });
 
-    const exclude_names: RegExp[] = args.exclude_names.map((p) => {
+    const exclude_names_patterns: string[] = [
+      ...args.exclude_names,
+      ...projectExcludes.exclude_names,
+    ];
+    const exclude_names: RegExp[] = exclude_names_patterns.map((p) => {
       return new RegExp(p, args.ignore_case ? "i" : undefined);
     });
 
@@ -68,6 +100,7 @@ export function createFilterPatterns(
       include_dirs,
       exclude_names,
       include_names,
+      detected_project_type: detectedProjectType,
     };
   } catch (e) {
     if (e instanceof LineCounterError) {

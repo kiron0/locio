@@ -40,19 +40,19 @@ function showInteractiveHome(): Promise<boolean> {
               break;
             case "2":
               console.log("\nCommon commands:");
-              console.log("  LocIO . --files-only");
+              console.log("  locio . --files-only");
               console.log(
                 "      Scan current directory with default settings.",
               );
-              console.log("  LocIO . --files-only");
+              console.log("  locio . --files-only");
               console.log("      Show only file counts.");
-              console.log("  LocIO . --lines-only");
+              console.log("  locio . --lines-only");
               console.log("      Show only line counts.");
-              console.log('  LocIO . --exclude "target" --exclude-dir ".git"');
+              console.log('  locio . --exclude "target" --exclude-dir ".git"');
               console.log("      Ignore build and VCS directories.");
-              console.log("  LocIO . --include-ext rs,ts,tsx");
+              console.log("  locio . --include-ext rs,ts,tsx");
               console.log("      Only include specific extensions.");
-              console.log("  LocIO . --export json");
+              console.log("  locio . --export json");
               console.log("      Print results in JSON format.\n");
               rl.close();
               resolve(false);
