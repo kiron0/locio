@@ -104,7 +104,7 @@ const PROJECT_TYPE_DETECTORS: Array<{
   {
     type: ProjectType.NodeJS,
     files: ["package.json"],
-    priority: 50,
+    priority: 75,
   },
   {
     type: ProjectType.Rust,
@@ -539,6 +539,28 @@ function detectProjectTypeAdvanced(directory: string): DetectionScore[] {
         score += 20;
         indicators.push("typescript-files");
       }
+      if (pkg && checkFileExists(searchPath, "package.json")) {
+        const hasBackendDeps = hasDependency(
+          pkg,
+          ["express", "koa", "fastify", "nest", "@nestjs/core"],
+          ["ts-node", "ts-node-dev"],
+        );
+        if (hasBackendDeps) {
+          score = Math.floor(score * 0.5);
+          indicators.push("nodejs-backend-penalty");
+        }
+      }
+    }
+
+    if (detector.type === ProjectType.NodeJS) {
+      if (
+        checkFileExists(searchPath, "package.json") &&
+        (checkFileExists(searchPath, "tsconfig.json") ||
+          hasTypeScriptFiles(searchPath))
+      ) {
+        score += 40;
+        indicators.push("nodejs-with-typescript");
+      }
     }
 
     if (detector.type === ProjectType.React) {
@@ -584,10 +606,34 @@ function detectProjectTypeAdvanced(directory: string): DetectionScore[] {
     );
 
     if (!hasJsFramework) {
-      if (
+      const hasTsConfig =
         checkFileExists(searchPath, "tsconfig.json") ||
-        hasTypeScriptFiles(searchPath)
-      ) {
+        hasTypeScriptFiles(searchPath);
+
+      if (hasTsConfig && checkFileExists(searchPath, "package.json")) {
+        const hasBackendDeps = hasDependency(
+          pkg,
+          ["express", "koa", "fastify", "nest", "@nestjs/core"],
+          ["ts-node", "ts-node-dev"],
+        );
+
+        if (hasBackendDeps) {
+          if (!scores.has(ProjectType.NodeJS)) {
+            scores.set(ProjectType.NodeJS, {
+              type: ProjectType.NodeJS,
+              score: 55,
+              indicators: ["package.json", "nodejs-backend-with-typescript"],
+            });
+          }
+        }
+        if (!scores.has(ProjectType.TypeScript)) {
+          scores.set(ProjectType.TypeScript, {
+            type: ProjectType.TypeScript,
+            score: 40,
+            indicators: ["tsconfig-or-ts-files"],
+          });
+        }
+      } else if (hasTsConfig) {
         if (!scores.has(ProjectType.TypeScript)) {
           scores.set(ProjectType.TypeScript, {
             type: ProjectType.TypeScript,

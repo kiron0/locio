@@ -214,6 +214,7 @@ enum StringState {
   SingleQuote,
   DoubleQuote,
   TemplateLiteral,
+  RegexLiteral,
 }
 
 function findCommentInLine(
@@ -232,6 +233,7 @@ function findCommentInLine(
   let stringState: StringState = StringState.None;
   let escapeNext = false;
   let i = 0;
+  let regexStartPos = -1;
 
   const singleLineComments: Array<{ pos: number; marker: string }> = [];
   let multiLineStartPos = -1;
@@ -275,6 +277,33 @@ function findCommentInLine(
         stringState = StringState.SingleQuote;
       } else if (char === "`") {
         stringState = StringState.TemplateLiteral;
+      } else if (char === "/") {
+        if (i + 1 < line.length) {
+          const nextChar = line[i + 1];
+          if (nextChar === "/" || nextChar === "*") {
+            for (const marker of patterns.singleLine) {
+              if (line.substring(i).startsWith(marker)) {
+                singleLineComments.push({ pos: i, marker });
+                break;
+              }
+            }
+            if (patterns.supportsMultiLine && multiLineStartPos === -1) {
+              if (line.substring(i).startsWith(patterns.multiLineStart)) {
+                multiLineStartPos = i;
+              }
+            }
+            i++;
+            continue;
+          } else {
+            const prevChar = i > 0 ? line[i - 1] : " ";
+            const prevIsValidForRegex = /[\s,;=([{!&|?:]/.test(prevChar);
+            if (prevIsValidForRegex) {
+              stringState = StringState.RegexLiteral;
+              regexStartPos = i;
+            }
+          }
+        } else {
+        }
       }
     } else if (stringState === StringState.DoubleQuote && char === '"') {
       stringState = StringState.None;
@@ -282,6 +311,59 @@ function findCommentInLine(
       stringState = StringState.None;
     } else if (stringState === StringState.TemplateLiteral && char === "`") {
       stringState = StringState.None;
+    } else if (stringState === StringState.RegexLiteral) {
+      if (char === "\\") {
+        if (i + 1 < line.length) {
+          i += 2;
+        } else {
+          i++;
+        }
+        continue;
+      }
+      if (char === "/") {
+        if (i + 1 < line.length) {
+          const nextChar = line[i + 1];
+          if (/[gimsuvy]/.test(nextChar)) {
+            let flagEnd = i + 1;
+            while (flagEnd < line.length && /[gimsuvy]/.test(line[flagEnd])) {
+              flagEnd++;
+            }
+            if (flagEnd >= line.length || !/[a-zA-Z0-9_]/.test(line[flagEnd])) {
+              stringState = StringState.None;
+              regexStartPos = -1;
+              i = flagEnd - 1;
+            }
+          } else if (!/[a-zA-Z0-9_]/.test(nextChar)) {
+            stringState = StringState.None;
+            regexStartPos = -1;
+          }
+        } else {
+          stringState = StringState.None;
+          regexStartPos = -1;
+        }
+      } else if (char === " " || char === "\t") {
+        const charsSinceRegexStart = i - regexStartPos - 1;
+        let onlyWhitespace = true;
+        for (let k = regexStartPos + 1; k < i; k++) {
+          if (line[k] !== " " && line[k] !== "\t") {
+            onlyWhitespace = false;
+            break;
+          }
+        }
+        if (onlyWhitespace && charsSinceRegexStart <= 2) {
+          let j = i + 1;
+          while (j < line.length && (line[j] === " " || line[j] === "\t")) {
+            j++;
+          }
+          if (j < line.length && /[0-9;,)}\]\]]/.test(line[j])) {
+            stringState = StringState.None;
+            regexStartPos = -1;
+          }
+        }
+      } else if (/[;,)}\]\]]/.test(char)) {
+        stringState = StringState.None;
+        regexStartPos = -1;
+      }
     }
 
     if (stringState === StringState.None) {
@@ -504,6 +586,21 @@ export function removeCommentsFromFile(filePath: string): {
   }
 }
 
+function isEslintComment(commentText: string): boolean {
+  const cleaned = commentText
+    .replace(/^\/\//, "")
+    .replace(/^\/\*/, "")
+    .replace(/\*\/$/, "")
+    .trim();
+  const lower = cleaned.toLowerCase();
+  return (
+    lower.startsWith("eslint") ||
+    lower.startsWith("@eslint") ||
+    lower.includes("eslint-disable") ||
+    lower.includes("eslint-enable")
+  );
+}
+
 function removeCommentsFromLine(
   line: string,
   patterns: CommentPatterns,
@@ -512,13 +609,33 @@ function removeCommentsFromLine(
   if (inMultiLineComment) {
     const endIndex = line.indexOf(patterns.multiLineEnd);
     if (endIndex !== -1) {
+      const commentText = line.substring(
+        0,
+        endIndex + patterns.multiLineEnd.length,
+      );
       const afterComment = line.substring(
         endIndex + patterns.multiLineEnd.length,
       );
+
+      if (isEslintComment(commentText)) {
+        return {
+          line: line.trimEnd(),
+          inMultiLineComment: false,
+          isEmpty: line.trim().length === 0,
+        };
+      }
+
       return {
         line: afterComment.trimEnd(),
         inMultiLineComment: false,
         isEmpty: afterComment.trim().length === 0,
+      };
+    }
+    if (isEslintComment(line)) {
+      return {
+        line: line.trimEnd(),
+        inMultiLineComment: true,
+        isEmpty: line.trim().length === 0,
       };
     }
     return { line: "", inMultiLineComment: true, isEmpty: true };
@@ -527,6 +644,7 @@ function removeCommentsFromLine(
   let stringState: StringState = StringState.None;
   let escapeNext = false;
   let i = 0;
+  let regexStartPos = -1;
 
   const singleLineCommentPos: number[] = [];
   let multiLineStartPos = -1;
@@ -569,6 +687,33 @@ function removeCommentsFromLine(
         stringState = StringState.SingleQuote;
       } else if (char === "`") {
         stringState = StringState.TemplateLiteral;
+      } else if (char === "/") {
+        if (i + 1 < line.length) {
+          const nextChar = line[i + 1];
+          if (nextChar === "/" || nextChar === "*") {
+            for (const marker of patterns.singleLine) {
+              if (line.substring(i).startsWith(marker)) {
+                singleLineCommentPos.push(i);
+                break;
+              }
+            }
+            if (patterns.supportsMultiLine && multiLineStartPos === -1) {
+              if (line.substring(i).startsWith(patterns.multiLineStart)) {
+                multiLineStartPos = i;
+              }
+            }
+            i++;
+            continue;
+          } else {
+            const prevChar = i > 0 ? line[i - 1] : " ";
+            const prevIsValidForRegex = /[\s,;=([{!&|?:]/.test(prevChar);
+            if (prevIsValidForRegex) {
+              stringState = StringState.RegexLiteral;
+              regexStartPos = i;
+            }
+          }
+        } else {
+        }
       }
     } else if (stringState === StringState.DoubleQuote && char === '"') {
       stringState = StringState.None;
@@ -576,6 +721,59 @@ function removeCommentsFromLine(
       stringState = StringState.None;
     } else if (stringState === StringState.TemplateLiteral && char === "`") {
       stringState = StringState.None;
+    } else if (stringState === StringState.RegexLiteral) {
+      if (char === "\\") {
+        if (i + 1 < line.length) {
+          i += 2;
+        } else {
+          i++;
+        }
+        continue;
+      }
+      if (char === "/") {
+        if (i + 1 < line.length) {
+          const nextChar = line[i + 1];
+          if (/[gimsuvy]/.test(nextChar)) {
+            let flagEnd = i + 1;
+            while (flagEnd < line.length && /[gimsuvy]/.test(line[flagEnd])) {
+              flagEnd++;
+            }
+            if (flagEnd >= line.length || !/[a-zA-Z0-9_]/.test(line[flagEnd])) {
+              stringState = StringState.None;
+              regexStartPos = -1;
+              i = flagEnd - 1;
+            }
+          } else if (!/[a-zA-Z0-9_]/.test(nextChar)) {
+            stringState = StringState.None;
+            regexStartPos = -1;
+          }
+        } else {
+          stringState = StringState.None;
+          regexStartPos = -1;
+        }
+      } else if (char === " " || char === "\t") {
+        const charsSinceRegexStart = i - regexStartPos - 1;
+        let onlyWhitespace = true;
+        for (let k = regexStartPos + 1; k < i; k++) {
+          if (line[k] !== " " && line[k] !== "\t") {
+            onlyWhitespace = false;
+            break;
+          }
+        }
+        if (onlyWhitespace && charsSinceRegexStart <= 2) {
+          let j = i + 1;
+          while (j < line.length && (line[j] === " " || line[j] === "\t")) {
+            j++;
+          }
+          if (j < line.length && /[0-9;,)}\]\]]/.test(line[j])) {
+            stringState = StringState.None;
+            regexStartPos = -1;
+          }
+        }
+      } else if (/[;,)}\]\]]/.test(char)) {
+        stringState = StringState.None;
+        regexStartPos = -1;
+      }
     }
 
     if (stringState === StringState.None) {
@@ -604,9 +802,22 @@ function removeCommentsFromLine(
     );
 
     if (endIndex !== -1) {
+      const commentText = line.substring(
+        multiLineStartPos,
+        endIndex + patterns.multiLineEnd.length,
+      );
       const afterComment = line.substring(
         endIndex + patterns.multiLineEnd.length,
       );
+
+      if (isEslintComment(commentText)) {
+        return {
+          line: line.trimEnd(),
+          inMultiLineComment: false,
+          isEmpty: line.trim().length === 0,
+        };
+      }
+
       const result = (beforeComment + afterComment).trimEnd();
       return {
         line: result,
@@ -614,6 +825,15 @@ function removeCommentsFromLine(
         isEmpty: result.length === 0,
       };
     } else {
+      const commentText = line.substring(multiLineStartPos);
+      if (isEslintComment(commentText)) {
+        return {
+          line: line.trimEnd(),
+          inMultiLineComment: true,
+          isEmpty: line.trim().length === 0,
+        };
+      }
+
       const result = beforeComment.trimEnd();
       return {
         line: result,
@@ -625,6 +845,21 @@ function removeCommentsFromLine(
 
   if (singleLineCommentPos.length > 0) {
     const commentStart = singleLineCommentPos[0];
+
+    for (const marker of patterns.singleLine) {
+      if (line.substring(commentStart).startsWith(marker)) {
+        const commentText = line.substring(commentStart + marker.length);
+        if (isEslintComment(commentText)) {
+          return {
+            line: line.trimEnd(),
+            inMultiLineComment: false,
+            isEmpty: line.trim().length === 0,
+          };
+        }
+        break;
+      }
+    }
+
     const result = line.substring(0, commentStart).trimEnd();
     return {
       line: result,
