@@ -10,7 +10,13 @@
 - **Multiple extensions** - comma-separated extension lists (e.g., `rs,ts,js`)
 - **Size filtering** - exclude files by minimum/maximum size
 - **Binary detection** - automatically exclude binary files
-- **Export reports** - save results as `LocIO-report.{txt,json,csv,tsv}` files
+- **Comment analysis** - count comment lines separately (full-line and inline)
+- **Remove comments** - automatically remove comments from code files
+- **Project type detection** - automatically detects project type (Node.js, Rust, Python, etc.)
+- **Auto-excludes** - automatically applies common excludes based on detected project type
+- **Export reports** - save results in multiple formats: `txt`, `json`, `csv`, `tsv`, `markdown`, `html`
+- **Watch mode** - automatically rescan on file changes
+- **Top files/dirs** - show largest files and directories with most files
 - **Fast and efficient** - built with TypeScript
 - **Rich statistics** - detailed breakdown by file extension and directory
 
@@ -75,6 +81,15 @@ locio --include-ext rs,ts,js --stats
 
 # Export report in JSON format
 locio --stats --export json
+
+# Count comments separately
+locio --comments --stats
+
+# Remove comments from TypeScript files
+locio --rm-comments ts
+
+# Watch directory for changes
+locio --watch
 ```
 
 ## Quick Example
@@ -91,6 +106,18 @@ locio --max-size 5MB --no-binary --stats
 
 # Export JSON report (writes to LocIO-report.json)
 locio --stats --export json
+
+# Count comments and show code vs comments ratio
+locio --code-vs-comments --stats
+
+# Remove comments from JavaScript and TypeScript files
+locio --rm-comments js,ts
+
+# Show top 10 largest files
+locio --stats --top-files 10
+
+# Watch mode with statistics
+locio --watch
 ```
 
 ---

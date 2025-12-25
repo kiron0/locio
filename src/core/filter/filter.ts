@@ -1,14 +1,14 @@
 import * as fs from "fs";
 import * as path from "path";
-import type { Args } from "../cli/args.js";
-import { isBinaryFile, parseSize } from "../utils/files.js";
-import { LineCounterError } from "./errors.js";
-import { DEFAULT_IGNORED_EXTENSIONS } from "./ignored.js";
+import type { Args } from "../../cli/args.js";
+import { isBinaryFile, parseSize } from "../../utils/files.js";
 import {
   detectProjectType,
   getProjectExcludes,
   type ProjectType,
-} from "./project-type.js";
+} from "../detection/index.js";
+import { LineCounterError } from "../errors.js";
+import { DEFAULT_IGNORED_EXTENSIONS } from "./ignored.js";
 
 function loadDefaultIgnoredExtensions(): string[] {
   return DEFAULT_IGNORED_EXTENSIONS.map((ext) => ext.toLowerCase());

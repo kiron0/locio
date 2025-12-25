@@ -457,3 +457,181 @@ export function countLinesWithComments(
     return null;
   }
 }
+
+export function removeCommentsFromFile(filePath: string): {
+  success: boolean;
+  commentsFound: boolean;
+} {
+  try {
+    const contents = fs.readFileSync(filePath, "utf-8");
+    const originalLines = contents.split(/\r?\n/);
+
+    const extension = path.extname(filePath);
+    const patterns = getCommentPatterns(extension);
+
+    let inMultiLineComment = false;
+    const processedLines: string[] = [];
+    let commentsFound = false;
+
+    for (const line of originalLines) {
+      const originalLine = line;
+      const processed = removeCommentsFromLine(
+        line,
+        patterns,
+        inMultiLineComment,
+      );
+
+      if (processed.line !== originalLine) {
+        commentsFound = true;
+      }
+
+      if (processed.line.trim() || !processed.isEmpty) {
+        processedLines.push(processed.line);
+      }
+      inMultiLineComment = processed.inMultiLineComment;
+    }
+
+    const newContents = processedLines.join("\n");
+
+    if (commentsFound || newContents !== contents) {
+      fs.writeFileSync(filePath, newContents, "utf-8");
+      return { success: true, commentsFound: true };
+    }
+
+    return { success: true, commentsFound: false };
+  } catch {
+    return { success: false, commentsFound: false };
+  }
+}
+
+function removeCommentsFromLine(
+  line: string,
+  patterns: CommentPatterns,
+  inMultiLineComment: boolean,
+): { line: string; inMultiLineComment: boolean; isEmpty: boolean } {
+  if (inMultiLineComment) {
+    const endIndex = line.indexOf(patterns.multiLineEnd);
+    if (endIndex !== -1) {
+      const afterComment = line.substring(
+        endIndex + patterns.multiLineEnd.length,
+      );
+      return {
+        line: afterComment.trimEnd(),
+        inMultiLineComment: false,
+        isEmpty: afterComment.trim().length === 0,
+      };
+    }
+    return { line: "", inMultiLineComment: true, isEmpty: true };
+  }
+
+  let stringState: StringState = StringState.None;
+  let escapeNext = false;
+  let i = 0;
+
+  const singleLineCommentPos: number[] = [];
+  let multiLineStartPos = -1;
+
+  while (i < line.length) {
+    const char = line[i];
+
+    if (escapeNext) {
+      escapeNext = false;
+      i++;
+      continue;
+    }
+
+    if (char === "\\" && stringState !== StringState.None) {
+      escapeNext = true;
+      i++;
+      continue;
+    }
+
+    if (
+      stringState === StringState.TemplateLiteral &&
+      char === "$" &&
+      i + 1 < line.length &&
+      line[i + 1] === "{"
+    ) {
+      let depth = 1;
+      i += 2;
+      while (i < line.length && depth > 0) {
+        if (line[i] === "{") depth++;
+        else if (line[i] === "}") depth--;
+        i++;
+      }
+      continue;
+    }
+
+    if (stringState === StringState.None) {
+      if (char === '"') {
+        stringState = StringState.DoubleQuote;
+      } else if (char === "'") {
+        stringState = StringState.SingleQuote;
+      } else if (char === "`") {
+        stringState = StringState.TemplateLiteral;
+      }
+    } else if (stringState === StringState.DoubleQuote && char === '"') {
+      stringState = StringState.None;
+    } else if (stringState === StringState.SingleQuote && char === "'") {
+      stringState = StringState.None;
+    } else if (stringState === StringState.TemplateLiteral && char === "`") {
+      stringState = StringState.None;
+    }
+
+    if (stringState === StringState.None) {
+      for (const marker of patterns.singleLine) {
+        if (line.substring(i).startsWith(marker)) {
+          singleLineCommentPos.push(i);
+          break;
+        }
+      }
+
+      if (patterns.supportsMultiLine && multiLineStartPos === -1) {
+        if (line.substring(i).startsWith(patterns.multiLineStart)) {
+          multiLineStartPos = i;
+        }
+      }
+    }
+
+    i++;
+  }
+
+  if (multiLineStartPos !== -1) {
+    const beforeComment = line.substring(0, multiLineStartPos);
+    const endIndex = line.indexOf(
+      patterns.multiLineEnd,
+      multiLineStartPos + patterns.multiLineStart.length,
+    );
+
+    if (endIndex !== -1) {
+      const afterComment = line.substring(
+        endIndex + patterns.multiLineEnd.length,
+      );
+      const result = (beforeComment + afterComment).trimEnd();
+      return {
+        line: result,
+        inMultiLineComment: false,
+        isEmpty: result.length === 0,
+      };
+    } else {
+      const result = beforeComment.trimEnd();
+      return {
+        line: result,
+        inMultiLineComment: true,
+        isEmpty: result.length === 0,
+      };
+    }
+  }
+
+  if (singleLineCommentPos.length > 0) {
+    const commentStart = singleLineCommentPos[0];
+    const result = line.substring(0, commentStart).trimEnd();
+    return {
+      line: result,
+      inMultiLineComment: false,
+      isEmpty: result.length === 0,
+    };
+  }
+
+  return { line, inMultiLineComment: false, isEmpty: false };
+}

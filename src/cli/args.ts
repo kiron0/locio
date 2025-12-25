@@ -1,5 +1,10 @@
 import { Command } from "commander";
 import { getPackageVersion } from "../utils/version.js";
+import {
+  arrayAccumulator,
+  parseCommaSeparated,
+  parseOutputFormat,
+} from "./utils.js";
 
 export enum OutputFormat {
   Human = "human",
@@ -39,6 +44,7 @@ export interface Args {
   watch: boolean;
   comments: boolean;
   code_vs_comments: boolean;
+  rm_comments: boolean | string;
   top_files?: number;
   top_dirs?: number;
 }
@@ -56,9 +62,7 @@ export function createCommand(): Command {
     .option(
       "-e, --exclude <pattern>",
       "Exclude files matching pattern",
-      (val, prev) => {
-        return prev && Array.isArray(prev) ? [...prev, val] : [val];
-      },
+      arrayAccumulator,
     )
     .option(
       "--exclude-ext <extensions>",
@@ -71,30 +75,22 @@ export function createCommand(): Command {
     .option(
       "--exclude-dir <pattern>",
       "Exclude directories matching pattern",
-      (val, prev) => {
-        return prev && Array.isArray(prev) ? [...prev, val] : [val];
-      },
+      arrayAccumulator,
     )
     .option(
       "--include-dir <pattern>",
       "Include only directories matching pattern",
-      (val, prev) => {
-        return prev && Array.isArray(prev) ? [...prev, val] : [val];
-      },
+      arrayAccumulator,
     )
     .option(
       "--exclude-name <pattern>",
       "Exclude files by name pattern",
-      (val, prev) => {
-        return prev && Array.isArray(prev) ? [...prev, val] : [val];
-      },
+      arrayAccumulator,
     )
     .option(
       "--include-name <pattern>",
       "Include only files by name pattern",
-      (val, prev) => {
-        return prev && Array.isArray(prev) ? [...prev, val] : [val];
-      },
+      arrayAccumulator,
     )
     .option("--max-size <size>", "Maximum file size (e.g., 5MB)")
     .option("--min-size <size>", "Minimum file size (e.g., 1KB)")
@@ -122,6 +118,10 @@ export function createCommand(): Command {
       "--code-vs-comments",
       "Show code vs comments ratio (automatically enables --comments)",
     )
+    .option(
+      "--rm-comments [extensions]",
+      "Remove comments from files (modifies files in place). Optionally specify file extensions (comma-separated, e.g., js,ts,py). If no extensions specified, all files are processed.",
+    )
     .option("--top-files <n>", "Show top N largest files by size", parseInt)
     .option(
       "--top-dirs <n>",
@@ -140,10 +140,10 @@ export function parseArgs(): Args {
   const args = program.args;
 
   const excludeExt = options.excludeExt
-    ? options.excludeExt.split(",").map((e: string) => e.trim())
+    ? parseCommaSeparated(options.excludeExt)
     : [];
   const includeExt = options.includeExt
-    ? options.includeExt.split(",").map((e: string) => e.trim())
+    ? parseCommaSeparated(options.includeExt)
     : [];
 
   return {
@@ -169,44 +169,18 @@ export function parseArgs(): Args {
     no_binary: options.noBinary || false,
     ignore_case: options.ignoreCase || false,
     quiet: options.quiet || false,
-    export: (() => {
-      if (options.export === undefined) {
-        return undefined;
-      }
-      if (options.export === true) {
-        return OutputFormat.Human;
-      }
-      const exportStr = options.export as string;
-      if (exportStr.includes(",")) {
-        const formats = exportStr
-          .split(",")
-          .map((f) => f.trim().toLowerCase())
-          .map((f) => {
-            if (f === "json") return OutputFormat.Json;
-            if (f === "csv") return OutputFormat.Csv;
-            if (f === "tsv") return OutputFormat.Tsv;
-            if (f === "markdown" || f === "md") return OutputFormat.Markdown;
-            if (f === "html") return OutputFormat.Html;
-            if (f === "human" || f === "txt") return OutputFormat.Human;
-            return null;
-          })
-          .filter((f): f is OutputFormat => f !== null);
-        return formats.length > 0 ? formats : undefined;
-      }
-      const lower = exportStr.toLowerCase();
-      if (lower === "json") return OutputFormat.Json;
-      if (lower === "csv") return OutputFormat.Csv;
-      if (lower === "tsv") return OutputFormat.Tsv;
-      if (lower === "markdown" || lower === "md") return OutputFormat.Markdown;
-      if (lower === "html") return OutputFormat.Html;
-      return OutputFormat.Human;
-    })(),
+    export: parseOutputFormat(options.export),
     export_path: options.exportPath,
     version: false,
     watch: options.watch || false,
     comments:
       options.comments || options.codeVsComments || options.stats || false,
     code_vs_comments: options.codeVsComments || false,
+    rm_comments: (() => {
+      if (!options.rmComments) return false;
+      if (options.rmComments === true) return true;
+      return options.rmComments as string;
+    })(),
     top_files: options.topFiles,
     top_dirs: options.topDirs,
   };

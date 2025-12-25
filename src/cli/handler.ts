@@ -1,12 +1,12 @@
 import chalk from "chalk";
 import * as fs from "fs";
-import * as path from "path";
+import { detectProjectType, ProjectType } from "../core/detection/index.js";
 import { isError, LineCounterError } from "../core/errors.js";
-import { exportReport, formatProjectType } from "../core/export.js";
-import { detectProjectType, ProjectType } from "../core/project-type.js";
-import { scanDirectory, scanFile } from "../core/scanner.js";
+import { exportReport, formatProjectType } from "../core/export/index.js";
+import { scanDirectory, scanFile } from "../core/scanner/index.js";
 import { getPackageVersion } from "../utils/version.js";
 import type { Args } from "./args.js";
+import { validateDirectory } from "./utils.js";
 import { startWatchMode } from "./watch.js";
 
 function run(args: Args): void | LineCounterError {
@@ -20,12 +20,12 @@ function run(args: Args): void | LineCounterError {
     return;
   }
 
-  const targetPath = path.resolve(args.directory);
-
-  if (!fs.existsSync(targetPath)) {
-    return LineCounterError.directoryNotFound(args.directory);
+  const validation = validateDirectory(args.directory);
+  if (validation.error) {
+    return validation.error;
   }
 
+  const targetPath = validation.path;
   const stats = fs.statSync(targetPath);
   let summary: ReturnType<typeof scanDirectory>;
 
@@ -38,19 +38,48 @@ function run(args: Args): void | LineCounterError {
     }
   }
 
+  args.directory = targetPath;
+
+  if (args.rm_comments) {
+    if (!args.quiet) {
+      console.log(chalk.cyan("Removing comments from files...\n"));
+    }
+    if (stats.isFile()) {
+      summary = scanFile(args);
+    } else {
+      summary = scanDirectory(args);
+    }
+
+    if (isError(summary)) {
+      return summary;
+    }
+
+    const commentsRemoved = (summary as any)._commentsRemoved || 0;
+    if (!args.quiet) {
+      if (commentsRemoved > 0) {
+        console.log(
+          chalk.green(
+            `\n✓ Comments removed successfully from ${commentsRemoved} file(s)!\n`,
+          ),
+        );
+      } else {
+        console.log(chalk.yellow("\nℹ No comments found in any files.\n"));
+      }
+    }
+    return;
+  }
+
   if (stats.isFile()) {
-    summary = scanFile({ ...args, directory: targetPath });
-  } else if (stats.isDirectory()) {
-    summary = scanDirectory({ ...args, directory: targetPath });
+    summary = scanFile(args);
   } else {
-    return LineCounterError.notADirectory(args.directory);
+    summary = scanDirectory(args);
   }
 
   if (isError(summary)) {
     return summary;
   }
 
-  exportReport(summary, { ...args, directory: targetPath });
+  exportReport(summary, args);
 
   return;
 }

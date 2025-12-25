@@ -1,6 +1,6 @@
 {
   "name": "locio",
-  "version": "0.1.4",
+  "version": "1.0.0",
   "description": "A powerful CLI tool to count lines and files in directories with extensive filtering options",
   "type": "module",
   "main": "dist/index.js",

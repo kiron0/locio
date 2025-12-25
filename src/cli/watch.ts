@@ -1,34 +1,34 @@
 import chalk from "chalk";
 import * as fs from "fs";
-import * as path from "path";
 import { LineCounterError, isError } from "../core/errors.js";
-import { exportReport } from "../core/export.js";
-import { scanDirectory } from "../core/scanner.js";
+import { exportReport } from "../core/export/index.js";
+import { scanDirectory } from "../core/scanner/index.js";
 import type { Args } from "./args.js";
+import { validateDirectory } from "./utils.js";
 
 let watchTimeout: NodeJS.Timeout | null = null;
 let isScanning = false;
 let watcher: fs.FSWatcher | null = null;
 
 function performScan(args: Args): void | LineCounterError {
-  const dirPath = path.resolve(args.directory);
-
-  if (!fs.existsSync(dirPath)) {
-    return LineCounterError.directoryNotFound(args.directory);
+  const validation = validateDirectory(args.directory);
+  if (validation.error) {
+    return validation.error;
   }
 
+  const dirPath = validation.path;
   const stats = fs.statSync(dirPath);
   if (!stats.isDirectory()) {
     return LineCounterError.notADirectory(args.directory);
   }
 
-  const summary = scanDirectory({ ...args, directory: dirPath });
+  args.directory = dirPath;
+  const summary = scanDirectory(args);
   if (isError(summary)) {
     return summary;
   }
 
-  exportReport(summary, { ...args, directory: dirPath });
-
+  exportReport(summary, args);
   return;
 }
 
@@ -60,7 +60,7 @@ function debouncedScan(args: Args, debounceMs: number = 500): void {
       if (!args.quiet) {
         console.error(chalk.red(`\n❌ Error: ${result.message}`));
         if (result.suggestion) {
-          console.error(chalk.yellow(`\n💡 Suggestion:\n${result.suggestion}`));
+          console.error(chalk.yellow(`\n💡 Suggestion: ${result.suggestion}`));
         }
       }
     } else {
@@ -79,13 +79,13 @@ function debouncedScan(args: Args, debounceMs: number = 500): void {
 }
 
 export function startWatchMode(args: Args): void {
-  const dirPath = path.resolve(args.directory);
-
-  if (!fs.existsSync(dirPath)) {
-    console.error(`Error: Directory not found: ${args.directory}`);
+  const validation = validateDirectory(args.directory);
+  if (validation.error) {
+    console.error(`Error: ${validation.error.message}`);
     process.exit(1);
   }
 
+  const dirPath = validation.path;
   const stats = fs.statSync(dirPath);
   if (!stats.isDirectory()) {
     console.error(`Error: Not a directory: ${args.directory}`);

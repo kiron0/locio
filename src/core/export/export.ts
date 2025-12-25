@@ -1,11 +1,94 @@
 import chalk from "chalk";
 import * as fs from "fs";
 import * as path from "path";
-import type { Args } from "../cli/args.js";
-import { OutputFormat } from "../cli/args.js";
-import { formatSize } from "../utils/strings.js";
-import { detectProjectType, ProjectType } from "./project-type.js";
-import type { FileDetail, Summary } from "./types.js";
+import type { Args } from "../../cli/args.js";
+import { OutputFormat } from "../../cli/args.js";
+import { formatSize } from "../../utils/formatting/index.js";
+import { detectProjectType, ProjectType } from "../detection/index.js";
+import type { FileDetail, Summary } from "../types.js";
+
+function getCommentStats(
+  source:
+    | FileDetail
+    | {
+        comment_lines?: number | null;
+        code_lines?: number | null;
+        full_line_comments?: number | null;
+        inline_comments?: number | null;
+      },
+): {
+  codeLines: number;
+  commentLines: number;
+  fullLineComments: number;
+  inlineComments: number;
+} {
+  return {
+    codeLines: source.code_lines || 0,
+    commentLines: source.comment_lines || 0,
+    fullLineComments: source.full_line_comments || 0,
+    inlineComments: source.inline_comments || 0,
+  };
+}
+
+function formatCommentsText(
+  codeLines: number,
+  commentLines: number,
+  fullLineComments: number,
+  inlineComments: number,
+): string {
+  let result = ` (${codeLines} code, ${commentLines} comments`;
+  if (fullLineComments > 0 || inlineComments > 0) {
+    result += `: ${fullLineComments} full-line, ${inlineComments} inline`;
+  }
+  result += `)`;
+  return result;
+}
+
+function formatCommentsChalk(
+  codeLines: number,
+  commentLines: number,
+  fullLineComments: number,
+  inlineComments: number,
+): string {
+  let result = ` ${chalk.gray(`(${chalk.blue(codeLines)} code, ${chalk.cyan(commentLines)} comments`)}`;
+  if (fullLineComments > 0 || inlineComments > 0) {
+    result += chalk.gray(
+      `: ${chalk.yellow(fullLineComments)} full-line, ${chalk.magenta(inlineComments)} inline`,
+    );
+  }
+  result += chalk.gray(`)`);
+  return result;
+}
+
+function shouldShowComments(args: Args, hasCommentData: boolean): boolean {
+  return (
+    (args.comments || args.show_stats) && !args.files_only && hasCommentData
+  );
+}
+
+function formatFileSizeAndLines(
+  size: number,
+  lines: number | null,
+  args: Args,
+): { sizeStr: string; linesStr: string } {
+  return {
+    sizeStr: formatSize(size),
+    linesStr: lines !== null && !args.files_only ? ` | ${lines} lines` : "",
+  };
+}
+
+function groupFilesByDirectory(
+  details: FileDetail[],
+): Record<string, FileDetail[]> {
+  const byDir: Record<string, FileDetail[]> = {};
+  for (const detail of details) {
+    if (!byDir[detail.directory]) {
+      byDir[detail.directory] = [];
+    }
+    byDir[detail.directory].push(detail);
+  }
+  return byDir;
+}
 
 function isSingleFile(args: Args): boolean {
   try {
@@ -103,11 +186,6 @@ function buildHumanReport(summary: Summary, args: Args): string {
 
   out += `Directory: ${displayDirectory(args)}\n`;
 
-  const projectType = detectProjectType(args.directory);
-  if (projectType !== ProjectType.Unknown) {
-    out += `Project Type: ${formatProjectType(projectType)}\n`;
-  }
-
   if (!args.lines_only) {
     if (isSingleFile(args)) {
       out += `\nSize: ${formatSize(summary.total_size)}\n`;
@@ -170,23 +248,26 @@ function buildHumanReport(summary: Summary, args: Args): string {
       if (!args.files_only) {
         out += `, ${lines} lines`;
         if (
-          (args.comments || args.show_stats) &&
-          summary.comment_lines_by_extension &&
-          summary.comment_lines_by_extension[ext] !== undefined
+          shouldShowComments(
+            args,
+            summary.comment_lines_by_extension?.[ext] !== undefined,
+          )
         ) {
-          const commentLines = summary.comment_lines_by_extension[ext] || 0;
-          const codeLines = summary.code_lines_by_extension?.[ext] || 0;
-          const fullLineComments =
-            summary.full_line_comments_by_extension?.[ext] || 0;
-          const inlineComments =
-            summary.inline_comments_by_extension?.[ext] || 0;
-          out += ` (${codeLines} code, ${commentLines} comments`;
-          if (fullLineComments > 0 || inlineComments > 0) {
-            out += `: ${fullLineComments} full-line, ${inlineComments} inline`;
-          }
-          out += `)`;
-          if (args.code_vs_comments && codeLines > 0) {
-            const ratio = (commentLines / codeLines).toFixed(2);
+          const stats = getCommentStats({
+            comment_lines: summary.comment_lines_by_extension?.[ext] || 0,
+            code_lines: summary.code_lines_by_extension?.[ext] || 0,
+            full_line_comments:
+              summary.full_line_comments_by_extension?.[ext] || 0,
+            inline_comments: summary.inline_comments_by_extension?.[ext] || 0,
+          });
+          out += formatCommentsText(
+            stats.codeLines,
+            stats.commentLines,
+            stats.fullLineComments,
+            stats.inlineComments,
+          );
+          if (args.code_vs_comments && stats.codeLines > 0) {
+            const ratio = (stats.commentLines / stats.codeLines).toFixed(2);
             out += ` [${ratio}:1]`;
           }
         }
@@ -200,14 +281,7 @@ function buildHumanReport(summary: Summary, args: Args): string {
     out += "\nFiles by Directory:\n";
     out += "-".repeat(60) + "\n";
 
-    const byDir: Record<string, FileDetail[]> = {};
-    for (const detail of summary.details) {
-      if (!byDir[detail.directory]) {
-        byDir[detail.directory] = [];
-      }
-      byDir[detail.directory].push(detail);
-    }
-
+    const byDir = groupFilesByDirectory(summary.details);
     const sortedDirs = Object.keys(byDir).sort();
     for (const dir of sortedDirs) {
       const files = byDir[dir];
@@ -220,21 +294,18 @@ function buildHumanReport(summary: Summary, args: Args): string {
 
         let commentsStr = "";
         if (
-          (args.comments || args.show_stats) &&
-          !args.files_only &&
-          f.comment_lines !== undefined &&
-          f.comment_lines !== null
+          shouldShowComments(
+            args,
+            f.comment_lines !== undefined && f.comment_lines !== null,
+          )
         ) {
-          const codeLines = f.code_lines || 0;
-          const commentLines = f.comment_lines || 0;
-          const fullLineComments = f.full_line_comments || 0;
-          const inlineComments = f.inline_comments || 0;
-
-          commentsStr = ` (${codeLines} code, ${commentLines} comments`;
-          if (fullLineComments > 0 || inlineComments > 0) {
-            commentsStr += `: ${fullLineComments} full-line, ${inlineComments} inline`;
-          }
-          commentsStr += `)`;
+          const stats = getCommentStats(f);
+          commentsStr = formatCommentsText(
+            stats.codeLines,
+            stats.commentLines,
+            stats.fullLineComments,
+            stats.inlineComments,
+          );
         }
 
         out += `  - ${f.name} (${f.extension}, ${sizeStr}${linesStr}${commentsStr})\n`;
@@ -249,9 +320,11 @@ function buildHumanReport(summary: Summary, args: Args): string {
     out += `\nTop ${args.top_files} Largest Files:\n`;
     out += "-".repeat(60) + "\n";
     for (const file of topFiles) {
-      const sizeStr = formatSize(file.size);
-      const linesStr =
-        file.lines !== null && !args.files_only ? ` | ${file.lines} lines` : "";
+      const { sizeStr, linesStr } = formatFileSizeAndLines(
+        file.size,
+        file.lines,
+        args,
+      );
       out += `  ${sizeStr.padEnd(10)} ${file.name} (${file.extension})${linesStr}\n`;
     }
   }
@@ -283,13 +356,6 @@ function humanReport(summary: Summary, args: Args): void {
   console.log(chalk.cyan("=".repeat(60)));
 
   console.log(`\n${chalk.green.bold("Directory:")} ${displayDirectory(args)}`);
-
-  const projectType = detectProjectType(args.directory);
-  if (projectType !== ProjectType.Unknown) {
-    console.log(
-      `\n${chalk.green.bold("Project Type:")} ${chalk.blue(formatProjectType(projectType))}`,
-    );
-  }
 
   if (!args.lines_only) {
     if (isSingleFile(args)) {
@@ -373,25 +439,26 @@ function humanReport(summary: Summary, args: Args): void {
       if (!args.files_only) {
         line += `, ${chalk.yellow(lines)} lines`;
         if (
-          (args.comments || args.show_stats) &&
-          summary.comment_lines_by_extension &&
-          summary.comment_lines_by_extension[ext] !== undefined
+          shouldShowComments(
+            args,
+            summary.comment_lines_by_extension?.[ext] !== undefined,
+          )
         ) {
-          const commentLines = summary.comment_lines_by_extension[ext] || 0;
-          const codeLines = summary.code_lines_by_extension?.[ext] || 0;
-          const fullLineComments =
-            summary.full_line_comments_by_extension?.[ext] || 0;
-          const inlineComments =
-            summary.inline_comments_by_extension?.[ext] || 0;
-          line += ` ${chalk.gray(`(${chalk.blue(codeLines)} code, ${chalk.cyan(commentLines)} comments`)}`;
-          if (fullLineComments > 0 || inlineComments > 0) {
-            line += chalk.gray(
-              `: ${chalk.yellow(fullLineComments)} full-line, ${chalk.magenta(inlineComments)} inline`,
-            );
-          }
-          line += chalk.gray(`)`);
-          if (args.code_vs_comments && codeLines > 0) {
-            const ratio = (commentLines / codeLines).toFixed(2);
+          const stats = getCommentStats({
+            comment_lines: summary.comment_lines_by_extension?.[ext] || 0,
+            code_lines: summary.code_lines_by_extension?.[ext] || 0,
+            full_line_comments:
+              summary.full_line_comments_by_extension?.[ext] || 0,
+            inline_comments: summary.inline_comments_by_extension?.[ext] || 0,
+          });
+          line += formatCommentsChalk(
+            stats.codeLines,
+            stats.commentLines,
+            stats.fullLineComments,
+            stats.inlineComments,
+          );
+          if (args.code_vs_comments && stats.codeLines > 0) {
+            const ratio = (stats.commentLines / stats.codeLines).toFixed(2);
             line += ` ${chalk.magenta(`[${ratio}:1]`)}`;
           }
         }
@@ -405,14 +472,7 @@ function humanReport(summary: Summary, args: Args): void {
     console.log(`\n${chalk.cyan.bold("Files by Directory:")}`);
     console.log(chalk.gray("-".repeat(60)));
 
-    const byDir: Record<string, FileDetail[]> = {};
-    for (const detail of summary.details) {
-      if (!byDir[detail.directory]) {
-        byDir[detail.directory] = [];
-      }
-      byDir[detail.directory].push(detail);
-    }
-
+    const byDir = groupFilesByDirectory(summary.details);
     const sortedDirs = Object.keys(byDir).sort();
     for (const dir of sortedDirs) {
       const files = byDir[dir];
@@ -425,23 +485,18 @@ function humanReport(summary: Summary, args: Args): void {
 
         let commentsStr = "";
         if (
-          (args.comments || args.show_stats) &&
-          !args.files_only &&
-          f.comment_lines !== undefined &&
-          f.comment_lines !== null
+          shouldShowComments(
+            args,
+            f.comment_lines !== undefined && f.comment_lines !== null,
+          )
         ) {
-          const codeLines = f.code_lines || 0;
-          const commentLines = f.comment_lines || 0;
-          const fullLineComments = f.full_line_comments || 0;
-          const inlineComments = f.inline_comments || 0;
-
-          commentsStr = ` ${chalk.gray(`(${chalk.blue(codeLines)} code, ${chalk.cyan(commentLines)} comments`)}`;
-          if (fullLineComments > 0 || inlineComments > 0) {
-            commentsStr += chalk.gray(
-              `: ${chalk.yellow(fullLineComments)} full-line, ${chalk.magenta(inlineComments)} inline`,
-            );
-          }
-          commentsStr += chalk.gray(`)`);
+          const stats = getCommentStats(f);
+          commentsStr = formatCommentsChalk(
+            stats.codeLines,
+            stats.commentLines,
+            stats.fullLineComments,
+            stats.inlineComments,
+          );
         }
 
         console.log(
@@ -458,9 +513,11 @@ function humanReport(summary: Summary, args: Args): void {
     console.log(`\n${chalk.cyan.bold(`Top ${args.top_files} Largest Files:`)}`);
     console.log(chalk.gray("-".repeat(60)));
     for (const file of topFiles) {
-      const sizeStr = formatSize(file.size);
-      const linesStr =
-        file.lines !== null && !args.files_only ? ` | ${file.lines} lines` : "";
+      const { sizeStr, linesStr } = formatFileSizeAndLines(
+        file.size,
+        file.lines,
+        args,
+      );
       console.log(
         `  ${chalk.yellow(sizeStr.padEnd(10))} ${chalk.white(file.name)} ${chalk.blue(`(${file.extension})`)}${linesStr}`,
       );
@@ -751,14 +808,7 @@ function buildMarkdownOutput(summary: Summary, args: Args): string {
 
   if (args.show_stats && summary.details.length > 0) {
     md += `\n## Files by Directory\n\n`;
-    const byDir: Record<string, FileDetail[]> = {};
-    for (const detail of summary.details) {
-      if (!byDir[detail.directory]) {
-        byDir[detail.directory] = [];
-      }
-      byDir[detail.directory].push(detail);
-    }
-
+    const byDir = groupFilesByDirectory(summary.details);
     const sortedDirs = Object.keys(byDir).sort();
     for (const dir of sortedDirs) {
       const files = byDir[dir];
