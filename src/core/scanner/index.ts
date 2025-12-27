@@ -1,5 +1,6 @@
 export {
   checkMaxDepth,
+  createCommentStats,
   createFileDetail,
   getFileMetadata,
   normalizeExtension,

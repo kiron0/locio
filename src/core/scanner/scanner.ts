@@ -22,7 +22,7 @@ import {
   normalizeExtension,
   processFileStatistics,
   updateSummaryWithFile,
-} from "./scanner-utils.js";
+} from "./index.js";
 
 function buildIgnoreInstance(dirPath: string): ignore.Ignore {
   const ig = ignore();
