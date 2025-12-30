@@ -1,16 +1,86 @@
 import chalk from "chalk";
+import * as crypto from "crypto";
 import * as fs from "fs";
+import { WATCH_CONSTANTS } from "../core/constants.js";
 import { LineCounterError, isError } from "../core/errors.js";
 import { exportReport } from "../core/export/index.js";
 import { scanDirectory } from "../core/scanner/index.js";
+import { createLogger } from "../utils/logger.js";
+import {
+  FileSystemEventRateLimiter,
+  isDirectorySafeToWatch,
+} from "../utils/security.js";
 import type { Args } from "./args.js";
 import { validateDirectory } from "./utils.js";
 
 let watchTimeout: NodeJS.Timeout | null = null;
 let isScanning = false;
 let watcher: fs.FSWatcher | null = null;
+let changedFiles: Set<string> = new Set();
+let rateLimiter: FileSystemEventRateLimiter | null = null;
 
-function performScan(args: Args): void | LineCounterError {
+interface FileHash {
+  path: string;
+  hash: string;
+  mtime: number;
+}
+
+export class WatchCache {
+  private cache = new Map<string, FileHash>();
+
+  getFileHash(filePath: string): string {
+    try {
+      const content = fs.readFileSync(filePath, "utf-8");
+      return crypto.createHash("sha256").update(content).digest("hex");
+    } catch {
+      return "";
+    }
+  }
+
+  isFileChanged(filePath: string): boolean {
+    try {
+      const stats = fs.statSync(filePath);
+      const cached = this.cache.get(filePath);
+
+      if (!cached) {
+        return true;
+      }
+
+      if (stats.mtimeMs !== cached.mtime) {
+        return true;
+      }
+
+      const currentHash = this.getFileHash(filePath);
+      return currentHash !== cached.hash;
+    } catch {
+      return true;
+    }
+  }
+
+  updateFile(filePath: string): void {
+    try {
+      const stats = fs.statSync(filePath);
+      const hash = this.getFileHash(filePath);
+      this.cache.set(filePath, { path: filePath, hash, mtime: stats.mtimeMs });
+    } catch {}
+  }
+
+  removeFile(filePath: string): void {
+    this.cache.delete(filePath);
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+}
+
+let watchCache: WatchCache | null = null;
+
+async function performScan(
+  args: Args,
+  incremental: boolean = false,
+  logger: ReturnType<typeof createLogger>,
+): Promise<void | LineCounterError> {
   const validation = validateDirectory(args.directory);
   if (validation.error) {
     return validation.error;
@@ -23,10 +93,35 @@ function performScan(args: Args): void | LineCounterError {
   }
 
   args.directory = dirPath;
-  const summary = scanDirectory(args);
+
+  if (!watchCache) {
+    watchCache = new WatchCache();
+  }
+
+  if (incremental && changedFiles.size > 0) {
+    const changedFilesArray = Array.from(changedFiles).slice(0, 10);
+    logger.info(
+      chalk.cyan(
+        `📝 Changed files: ${changedFiles.size > 10 ? `${changedFiles.size} files` : changedFilesArray.length + " file(s)"}`,
+      ),
+    );
+    if (changedFilesArray.length > 0) {
+      changedFilesArray.forEach((file) => {
+        logger.verbose(`   ${chalk.gray("•")} ${file}`);
+      });
+      if (changedFiles.size > 10) {
+        logger.verbose(chalk.gray(`   ... and ${changedFiles.size - 10} more`));
+      }
+    }
+    logger.info("");
+  }
+
+  const summary = await scanDirectory(args);
   if (isError(summary)) {
     return summary;
   }
+
+  changedFiles.clear();
 
   exportReport(summary, args);
   return;
@@ -38,85 +133,117 @@ function clearScreen(): void {
   }
 }
 
-function debouncedScan(args: Args, debounceMs: number = 500): void {
+export function getDebounceMs(args: Args): number {
+  if (args.watch_debounce !== undefined) {
+    return Math.max(
+      WATCH_CONSTANTS.MIN_DEBOUNCE_MS,
+      Math.min(WATCH_CONSTANTS.MAX_DEBOUNCE_MS, args.watch_debounce),
+    );
+  }
+  return WATCH_CONSTANTS.DEFAULT_DEBOUNCE_MS;
+}
+
+function debouncedScan(
+  args: Args,
+  filename: string,
+  logger: ReturnType<typeof createLogger>,
+): void {
   if (watchTimeout) {
     clearTimeout(watchTimeout);
   }
 
-  watchTimeout = setTimeout(() => {
+  if (filename) {
+    changedFiles.add(filename);
+  }
+
+  const debounceMs = getDebounceMs(args);
+
+  watchTimeout = setTimeout(async () => {
     if (isScanning) {
       return;
     }
 
     isScanning = true;
 
-    if (!args.quiet) {
-      clearScreen();
-      console.log(chalk.cyan("🔄 Changes detected. Rescanning...\n"));
-    }
+    logger.info(chalk.cyan("🔄 Changes detected. Rescanning...\n"));
 
-    const result = performScan(args);
+    const result = await performScan(args, true, logger);
     if (isError(result)) {
-      if (!args.quiet) {
-        console.error(chalk.red(`\n❌ Error: ${result.message}`));
-        if (result.suggestion) {
-          console.error(chalk.yellow(`\n💡 Suggestion: ${result.suggestion}`));
-        }
+      logger.error(`\n❌ Error: ${result.message}`);
+      if (result.suggestion) {
+        logger.warn(`\n💡 Suggestion: ${result.suggestion}`);
       }
     } else {
-      if (!args.quiet) {
-        console.log(chalk.gray("\n" + "─".repeat(60)));
-        console.log(
-          chalk.gray(
-            `👀 Watching for changes... (Press ${chalk.yellow("Ctrl+C")} to stop)`,
-          ),
-        );
-      }
+      logger.info(chalk.gray("\n" + "─".repeat(60)));
+      logger.info(
+        chalk.gray(
+          `👀 Watching for changes... (Press ${chalk.yellow("Ctrl+C")} to stop)`,
+        ),
+      );
     }
 
     isScanning = false;
   }, debounceMs);
 }
 
-export function startWatchMode(args: Args): void {
+export async function startWatchMode(args: Args): Promise<void> {
+  const logger = createLogger(args);
   const validation = validateDirectory(args.directory);
   if (validation.error) {
-    console.error(`Error: ${validation.error.message}`);
+    logger.error(`Error: ${validation.error.message}`);
     process.exit(1);
   }
 
   const dirPath = validation.path;
   const stats = fs.statSync(dirPath);
   if (!stats.isDirectory()) {
-    console.error(`Error: Not a directory: ${args.directory}`);
+    logger.error(`Error: Not a directory: ${args.directory}`);
     process.exit(1);
   }
 
-  if (!args.quiet) {
-    console.log(chalk.cyan("🚀 Starting watch mode...\n"));
-  }
-
-  const initialResult = performScan(args);
-  if (isError(initialResult)) {
-    console.error(`Error: ${initialResult.message}`);
-    process.exit(1);
-  }
-
-  if (!args.quiet) {
-    console.log(chalk.gray("\n" + "─".repeat(60)));
-    console.log(
-      chalk.gray(
-        `👀 Watching for changes... (Press ${chalk.yellow("Ctrl+C")} to stop)`,
-      ),
+  if (!isDirectorySafeToWatch(dirPath)) {
+    logger.error(
+      `Error: Cannot watch sensitive directory: ${dirPath}\n` +
+        "  - System directories and root directories are not allowed\n" +
+        "  - Please specify a project directory instead",
     );
+    process.exit(1);
   }
+
+  logger.info(chalk.cyan("🚀 Starting watch mode...\n"));
+
+  const debounceMs = getDebounceMs(args);
+  if (args.watch_debounce !== undefined) {
+    logger.verbose(chalk.gray(`⏱️  Watch debounce: ${debounceMs}ms\n`));
+  }
+
+  watchCache = new WatchCache();
+  changedFiles.clear();
+  rateLimiter = new FileSystemEventRateLimiter(100, 1000);
+
+  const initialResult = await performScan(args, false, logger);
+  if (isError(initialResult)) {
+    logger.error(`Error: ${initialResult.message}`);
+    process.exit(1);
+  }
+
+  logger.info(chalk.gray("\n" + "─".repeat(60)));
+  logger.info(
+    chalk.gray(
+      `👀 Watching for changes... (Press ${chalk.yellow("Ctrl+C")} to stop)`,
+    ),
+  );
 
   try {
     watcher = fs.watch(
       dirPath,
       { recursive: true },
-      (eventType: string, filename: string | null) => {
+      (_eventType: string, filename: string | null) => {
         if (!filename) {
+          return;
+        }
+
+        if (rateLimiter && !rateLimiter.shouldAllow()) {
           return;
         }
 
@@ -124,25 +251,22 @@ export function startWatchMode(args: Args): void {
           return;
         }
 
-        debouncedScan(args, 500);
+        debouncedScan(args, filename, logger);
       },
     );
 
     watcher.on("error", (error: Error) => {
-      if (!args.quiet) {
-        console.error(chalk.red(`\nWatch error: ${error.message}`));
-      }
+      logger.error(`\nWatch error: ${error.message}`);
+      logger.warn(
+        "Note: Recursive watching may not be supported on all systems.",
+      );
     });
   } catch (error) {
-    console.error(
-      chalk.red(
-        `Failed to start watch mode: ${error instanceof Error ? error.message : String(error)}`,
-      ),
+    logger.error(
+      `Failed to start watch mode: ${error instanceof Error ? error.message : String(error)}`,
     );
-    console.error(
-      chalk.yellow(
-        "Note: Recursive watching may not be supported on all systems.",
-      ),
+    logger.warn(
+      "Note: Recursive watching may not be supported on all systems.",
     );
     process.exit(1);
   }
@@ -154,9 +278,12 @@ export function startWatchMode(args: Args): void {
     if (watcher) {
       watcher.close();
     }
-    if (!args.quiet) {
-      console.log(chalk.gray("\n\n👋 Watch mode stopped."));
+    if (watchCache) {
+      watchCache.clear();
+      watchCache = null;
     }
+    changedFiles.clear();
+    logger.info(chalk.gray("\n\n👋 Watch mode stopped."));
     process.exit(0);
   };
 

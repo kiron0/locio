@@ -45,7 +45,19 @@ export function parseOutputFormat(
 export function validateDirectory(
   dir: string,
 ): { path: string; error: null } | { path: null; error: LineCounterError } {
-  const targetPath = path.resolve(dir);
+  if (!dir || dir.trim().length === 0) {
+    return { path: null, error: LineCounterError.directoryNotFound("") };
+  }
+
+  let targetPath: string;
+  try {
+    targetPath = path.resolve(dir.trim());
+  } catch (error) {
+    return {
+      path: null,
+      error: LineCounterError.directoryNotFound(dir),
+    };
+  }
 
   if (!fs.existsSync(targetPath)) {
     return { path: null, error: LineCounterError.directoryNotFound(dir) };

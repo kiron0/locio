@@ -8,7 +8,19 @@ bun.lock
 .DS_Store
 
 tsconfig.json
+tsconfig.test.json
 tsup.config.ts
+vitest.config.ts
 
+tests/
 *.test.ts
 *.md
+*.bench.ts
+*.fixture.ts
+*.helper.ts
+*.util.ts
+*.type.ts
+*.interface.ts
+*.enum.ts
+*.constant.ts
+*.config.ts

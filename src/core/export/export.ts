@@ -1,11 +1,33 @@
 import chalk from "chalk";
 import * as fs from "fs";
 import * as path from "path";
+import * as process from "process";
 import type { Args } from "../../cli/args.js";
 import { OutputFormat } from "../../cli/args.js";
 import { formatSize } from "../../utils/formatting/index.js";
+import { validateExportPath } from "../../utils/security.js";
 import { detectProjectType, ProjectType } from "../detection/index.js";
 import type { FileDetail, Summary } from "../types.js";
+
+function getTerminalWidth(): number {
+  return process.stdout.columns || 80;
+}
+
+function truncateToWidth(text: string, maxWidth: number): string {
+  if (text.length <= maxWidth) {
+    return text;
+  }
+  return "..." + text.slice(-(maxWidth - 3));
+}
+
+const severityColors = {
+  success: chalk.green,
+  info: chalk.cyan,
+  warning: chalk.yellow,
+  error: chalk.red,
+  highlight: chalk.white.bold,
+  muted: chalk.gray,
+};
 
 function getCommentStats(
   source:
@@ -180,6 +202,12 @@ function getTopDirectories(
     .slice(0, n);
 }
 
+function getExtensions(summary: Summary): string[] {
+  return summary.files_by_extension
+    ? Object.keys(summary.files_by_extension).sort()
+    : [];
+}
+
 function buildHumanReport(summary: Summary, args: Args): string {
   let out = "";
 
@@ -188,9 +216,16 @@ function buildHumanReport(summary: Summary, args: Args): string {
     return out;
   }
 
-  out += "=".repeat(60) + "\n";
-  out += "LocIO RESULTS".padStart(37).padEnd(60) + "\n";
-  out += "=".repeat(60) + "\n\n";
+  const terminalWidth = getTerminalWidth();
+  const separatorWidth = Math.min(60, terminalWidth - 2);
+  const separator = "=".repeat(separatorWidth);
+
+  out += separator + "\n";
+  out +=
+    "LocIO RESULTS"
+      .padStart(Math.floor(separatorWidth / 2) + 6)
+      .padEnd(separatorWidth) + "\n";
+  out += separator + "\n\n";
 
   out += `Directory: ${displayDirectory(args)}\n`;
 
@@ -237,14 +272,12 @@ function buildHumanReport(summary: Summary, args: Args): string {
     }
   }
 
-  if (Object.keys(summary.files_by_extension).length > 0) {
-    const extensions = Object.keys(summary.files_by_extension).sort();
+  const extensions = getExtensions(summary);
+  if (extensions.length > 0) {
     out += `\nExtensions: ${extensions.join(", ")}\n`;
   }
 
-  if (args.show_stats && Object.keys(summary.files_by_extension).length > 0) {
-    const extensions = Object.keys(summary.files_by_extension).sort();
-
+  if (args.show_stats && extensions.length > 0) {
     out += "\nStatistics by Extension:\n";
     out += "-".repeat(60) + "\n";
 
@@ -293,7 +326,7 @@ function buildHumanReport(summary: Summary, args: Args): string {
     }
   }
 
-  if (args.show_stats && summary.details.length > 0) {
+  if (args.show_stats && summary.details && summary.details.length > 0) {
     out += "\nFiles by Directory:\n";
     out += "-".repeat(60) + "\n";
 
@@ -368,9 +401,18 @@ function humanReport(summary: Summary, args: Args): void {
     return;
   }
 
-  console.log("\n" + chalk.cyan("=".repeat(60)));
-  console.log(chalk.cyan.bold("LocIO RESULTS".padStart(37).padEnd(60)));
-  console.log(chalk.cyan("=".repeat(60)));
+  const terminalWidth = getTerminalWidth();
+  const separatorWidth = Math.min(60, terminalWidth - 2);
+  const separator = "=".repeat(separatorWidth);
+  const titlePadding = Math.floor(separatorWidth / 2) + 6;
+
+  console.log("\n" + severityColors.info(separator));
+  console.log(
+    severityColors.info.bold(
+      "LocIO RESULTS".padStart(titlePadding).padEnd(separatorWidth),
+    ),
+  );
+  console.log(severityColors.info(separator));
 
   console.log(`\n${chalk.green.bold("Directory:")} ${displayDirectory(args)}`);
 
@@ -437,18 +479,18 @@ function humanReport(summary: Summary, args: Args): void {
     }
   }
 
-  if (Object.keys(summary.files_by_extension).length > 0) {
-    const extensions = Object.keys(summary.files_by_extension).sort();
+  const extensions = getExtensions(summary);
+  if (extensions.length > 0) {
     console.log(
       `\n${chalk.green.bold("Extensions:")} ${chalk.white(extensions.join(", "))}`,
     );
   }
 
-  if (args.show_stats && Object.keys(summary.files_by_extension).length > 0) {
-    console.log(`\n${chalk.cyan.bold("Statistics by Extension:")}`);
-    console.log(chalk.gray("-".repeat(60)));
-
-    const extensions = Object.keys(summary.files_by_extension).sort();
+  if (args.show_stats && extensions.length > 0) {
+    const terminalWidth = getTerminalWidth();
+    const separatorWidth = Math.min(60, terminalWidth - 2);
+    console.log(`\n${severityColors.info.bold("Statistics by Extension:")}`);
+    console.log(severityColors.muted("-".repeat(separatorWidth)));
 
     for (const ext of extensions) {
       const files = summary.files_by_extension[ext];
@@ -495,7 +537,7 @@ function humanReport(summary: Summary, args: Args): void {
     }
   }
 
-  if (args.show_stats && summary.details.length > 0) {
+  if (args.show_stats && summary.details && summary.details.length > 0) {
     console.log(`\n${chalk.cyan.bold("Files by Directory:")}`);
     console.log(chalk.gray("-".repeat(60)));
 
@@ -572,7 +614,66 @@ function humanReport(summary: Summary, args: Args): void {
 
 function buildJsonOutput(summary: Summary, args: Args): string {
   const projectType = detectProjectType(args.directory);
-  const output: any = {
+  interface JsonOutput {
+    directory: string;
+    project_type?: ProjectType;
+    project_type_display?: string;
+    files?: number;
+    size?: number;
+    size_formatted?: string;
+    lines?: number;
+    comment_lines?: number;
+    code_lines?: number;
+    blank_lines?: number;
+    full_line_comments?: number;
+    inline_comments?: number;
+    code_vs_comments_ratio?: number;
+    stats?: Record<
+      string,
+      {
+        files: number;
+        lines: number;
+        size: number;
+        comment_lines?: number;
+        code_lines?: number;
+        blank_lines?: number;
+        full_line_comments?: number;
+        inline_comments?: number;
+        code_vs_comments_ratio?: number;
+      }
+    >;
+    by_extension?: Record<
+      string,
+      {
+        files: number;
+        lines: number;
+        size: number;
+        comment_lines?: number;
+        code_lines?: number;
+        blank_lines?: number;
+        full_line_comments?: number;
+        inline_comments?: number;
+        code_vs_comments_ratio?: number;
+      }
+    >;
+    top_files?: Array<{
+      name: string;
+      directory: string;
+      extension: string;
+      size: number;
+      size_formatted: string;
+      lines: number | null;
+    }>;
+    top_directories?: Array<{
+      directory: string;
+      file_count: number;
+      total_size: number;
+      total_size_formatted: string;
+      total_lines: number;
+    }>;
+  }
+
+  const output: JsonOutput = {
     directory: displayDirectory(args),
   };
 
@@ -609,36 +710,54 @@ function buildJsonOutput(summary: Summary, args: Args): string {
   }
 
   if (args.show_stats) {
-    const stats: Record<string, any> = {};
-    for (const ext of Object.keys(summary.files_by_extension)) {
-      stats[ext] = {
-        files: summary.files_by_extension[ext],
-        lines: summary.lines_by_extension[ext] || 0,
-        size: summary.size_by_extension[ext] || 0,
-      };
-      if (args.comments) {
-        stats[ext].comment_lines =
-          summary.comment_lines_by_extension?.[ext] || 0;
-        stats[ext].code_lines = summary.code_lines_by_extension?.[ext] || 0;
-        stats[ext].blank_lines = summary.blank_lines_by_extension?.[ext] || 0;
-        stats[ext].full_line_comments =
-          summary.full_line_comments_by_extension?.[ext] || 0;
-        stats[ext].inline_comments =
-          summary.inline_comments_by_extension?.[ext] || 0;
-        if (
-          args.code_vs_comments &&
-          summary.code_lines_by_extension?.[ext] &&
-          summary.code_lines_by_extension[ext]! > 0
-        ) {
-          stats[ext].code_vs_comments_ratio = parseFloat(
-            (
-              (summary.comment_lines_by_extension![ext] || 0) /
-              summary.code_lines_by_extension[ext]!
-            ).toFixed(2),
-          );
+    const stats: Record<
+      string,
+      {
+        files: number;
+        lines: number;
+        size: number;
+        comment_lines?: number;
+        code_lines?: number;
+        blank_lines?: number;
+        full_line_comments?: number;
+        inline_comments?: number;
+        code_vs_comments_ratio?: number;
+      }
+    > = {};
+
+    const extensions = getExtensions(summary);
+    if (extensions.length > 0) {
+      for (const ext of extensions) {
+        stats[ext] = {
+          files: summary.files_by_extension[ext],
+          lines: summary.lines_by_extension[ext] || 0,
+          size: summary.size_by_extension[ext] || 0,
+        };
+        if (args.comments) {
+          stats[ext].comment_lines =
+            summary.comment_lines_by_extension?.[ext] || 0;
+          stats[ext].code_lines = summary.code_lines_by_extension?.[ext] || 0;
+          stats[ext].blank_lines = summary.blank_lines_by_extension?.[ext] || 0;
+          stats[ext].full_line_comments =
+            summary.full_line_comments_by_extension?.[ext] || 0;
+          stats[ext].inline_comments =
+            summary.inline_comments_by_extension?.[ext] || 0;
+          if (
+            args.code_vs_comments &&
+            summary.code_lines_by_extension?.[ext] &&
+            summary.code_lines_by_extension[ext]! > 0
+          ) {
+            stats[ext].code_vs_comments_ratio = parseFloat(
+              (
+                (summary.comment_lines_by_extension![ext] || 0) /
+                summary.code_lines_by_extension[ext]!
+              ).toFixed(2),
+            );
+          }
         }
       }
     }
+    output.stats = stats;
     output.by_extension = stats;
   }
 
@@ -680,7 +799,8 @@ function buildCsvOutput(summary: Summary, args: Args): string {
       out += ",Code vs Comments Ratio";
     }
     out += "\n";
-    for (const ext of Object.keys(summary.files_by_extension)) {
+    const extensions = getExtensions(summary);
+    for (const ext of extensions) {
       const count = summary.files_by_extension[ext];
       const lines = summary.lines_by_extension[ext] || 0;
       const codeLines = summary.code_lines_by_extension?.[ext] || 0;
@@ -696,7 +816,8 @@ function buildCsvOutput(summary: Summary, args: Args): string {
     }
   } else {
     out += "Extension,Files,Lines,Size\n";
-    for (const ext of Object.keys(summary.files_by_extension)) {
+    const extensions = getExtensions(summary);
+    for (const ext of extensions) {
       const count = summary.files_by_extension[ext];
       const lines = summary.lines_by_extension[ext] || 0;
       const size = summary.size_by_extension[ext] || 0;
@@ -719,13 +840,14 @@ function buildTsvOutput(summary: Summary, args: Args): string {
       out += "\tCode vs Comments Ratio";
     }
     out += "\n";
-    for (const ext of Object.keys(summary.files_by_extension)) {
-      const count = summary.files_by_extension[ext];
-      const lines = summary.lines_by_extension[ext] || 0;
+    const extensions = getExtensions(summary);
+    for (const ext of extensions) {
+      const count = summary.files_by_extension![ext];
+      const lines = summary.lines_by_extension![ext] || 0;
       const codeLines = summary.code_lines_by_extension?.[ext] || 0;
       const commentLines = summary.comment_lines_by_extension?.[ext] || 0;
       const blankLines = summary.blank_lines_by_extension?.[ext] || 0;
-      const size = summary.size_by_extension[ext] || 0;
+      const size = summary.size_by_extension![ext] || 0;
       out += `${ext}\t${count}\t${lines}\t${codeLines}\t${commentLines}\t${blankLines}\t${size}`;
       if (args.code_vs_comments && codeLines > 0) {
         const ratio = ((commentLines || 0) / codeLines).toFixed(2);
@@ -735,7 +857,8 @@ function buildTsvOutput(summary: Summary, args: Args): string {
     }
   } else {
     out += "Extension\tFiles\tLines\tSize\n";
-    for (const ext of Object.keys(summary.files_by_extension)) {
+    const extensions = getExtensions(summary);
+    for (const ext of extensions) {
       const count = summary.files_by_extension[ext];
       const lines = summary.lines_by_extension[ext] || 0;
       const size = summary.size_by_extension[ext] || 0;
@@ -786,7 +909,8 @@ function buildMarkdownOutput(summary: Summary, args: Args): string {
     }
   }
 
-  if (Object.keys(summary.files_by_extension).length > 0) {
+  const extensions = getExtensions(summary);
+  if (extensions.length > 0) {
     md += `\n## Statistics by Extension\n\n`;
     md += `| Extension | Files |`;
     if (!args.lines_only) {
@@ -816,8 +940,6 @@ function buildMarkdownOutput(summary: Summary, args: Args): string {
       }
     }
     md += `\n`;
-
-    const extensions = Object.keys(summary.files_by_extension).sort();
     for (const ext of extensions) {
       const files = summary.files_by_extension[ext];
       const size = summary.size_by_extension[ext] || 0;
@@ -845,7 +967,7 @@ function buildMarkdownOutput(summary: Summary, args: Args): string {
     }
   }
 
-  if (args.show_stats && summary.details.length > 0) {
+  if (args.show_stats && summary.details && summary.details.length > 0) {
     md += `\n## Files by Directory\n\n`;
     const byDir = groupFilesByDirectory(summary.details);
     const sortedDirs = Object.keys(byDir).sort();
@@ -942,12 +1064,12 @@ function buildMarkdownOutput(summary: Summary, args: Args): string {
 
 function buildHtmlOutput(summary: Summary, args: Args): string {
   const projectType = detectProjectType(args.directory);
-  const extensions = Object.keys(summary.files_by_extension).sort();
+  const extensions = getExtensions(summary);
   const extensionData = extensions.map((ext) => ({
     ext,
-    files: summary.files_by_extension[ext],
-    lines: summary.lines_by_extension[ext] || 0,
-    size: summary.size_by_extension[ext] || 0,
+    files: summary.files_by_extension?.[ext] || 0,
+    lines: summary.lines_by_extension?.[ext] || 0,
+    size: summary.size_by_extension?.[ext] || 0,
     codeLines: summary.code_lines_by_extension?.[ext] || 0,
     commentLines: summary.comment_lines_by_extension?.[ext] || 0,
     blankLines: summary.blank_lines_by_extension?.[ext] || 0,
@@ -960,6 +1082,7 @@ function buildHtmlOutput(summary: Summary, args: Args): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LocIO Report - ${displayDirectory(args)}</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
   <style>
     * {
       margin: 0;
@@ -1067,6 +1190,38 @@ function buildHtmlOutput(summary: Summary, args: Args): string {
       color: #667eea;
       text-decoration: none;
     }
+    #dependencyGraph {
+      width: 100%;
+      height: 600px;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      background: #f7fafc;
+      margin-top: 20px;
+    }
+    .graph-legend {
+      margin-top: 15px;
+      padding: 15px;
+      background: #f7fafc;
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .legend-color {
+      width: 20px;
+      height: 20px;
+      border-radius: 4px;
+      border: 2px solid #3e3e3e;
+    }
+    .legend-dir { background: #667eea; }
+    .legend-file { background: #4ec9b0; }
+    .legend-edge { background: #848484; }
   </style>
 </head>
 <body>
@@ -1232,35 +1387,259 @@ function buildHtmlOutput(summary: Summary, args: Args): string {
       }
 
       ${
-        args.export === OutputFormat.Html
+        args.export === OutputFormat.Html &&
+        summary.details &&
+        summary.details.length > 0
           ? (() => {
               const dirStats: Record<
                 string,
                 { fileCount: number; totalSize: number; totalLines: number }
               > = {};
+              const dirSet = new Set<string>();
+              const dirNormalizedToOriginal = new Map<string, string>();
+              const fileToDir = new Map<string, string>();
+
               for (const detail of summary.details) {
-                if (!dirStats[detail.directory]) {
-                  dirStats[detail.directory] = {
+                const normalizedDir = detail.directory.replace(/\\/g, "/");
+
+                if (!dirStats[normalizedDir]) {
+                  dirStats[normalizedDir] = {
                     fileCount: 0,
                     totalSize: 0,
                     totalLines: 0,
                   };
+                  dirNormalizedToOriginal.set(normalizedDir, detail.directory);
                 }
-                dirStats[detail.directory].fileCount += 1;
-                dirStats[detail.directory].totalSize += detail.size;
+                dirStats[normalizedDir].fileCount += 1;
+                dirStats[normalizedDir].totalSize += detail.size;
                 if (detail.lines !== null) {
-                  dirStats[detail.directory].totalLines += detail.lines;
+                  dirStats[normalizedDir].totalLines += detail.lines;
+                }
+
+                const dirParts = normalizedDir.split("/").filter((p) => p);
+                for (let i = 0; i < dirParts.length; i++) {
+                  const dirPath = dirParts.slice(0, i + 1).join("/");
+                  dirSet.add(dirPath);
+                  if (!dirNormalizedToOriginal.has(dirPath)) {
+                    dirNormalizedToOriginal.set(dirPath, dirPath);
+                  }
+                }
+
+                const filePath = path.join(detail.directory, detail.name);
+                fileToDir.set(filePath, normalizedDir);
+              }
+
+              const nodesData: Array<{
+                id: string;
+                label: string;
+                group: number;
+                title: string;
+                value: number;
+              }> = [];
+              const edgesData: Array<{
+                from: string;
+                to: string;
+                arrows: string;
+                color: { color: string };
+                title: string;
+              }> = [];
+
+              const dirToId = new Map<string, string>();
+              const fileToId = new Map<string, string>();
+              let nodeId = 0;
+
+              const sortedDirs = Array.from(dirSet).sort();
+              for (const dir of sortedDirs) {
+                const id = `dir_${nodeId++}`;
+                dirToId.set(dir, id);
+                const stats = dirStats[dir] || {
+                  fileCount: 0,
+                  totalSize: 0,
+                  totalLines: 0,
+                };
+                const dirName = dir.split("/").pop() || dir;
+                nodesData.push({
+                  id,
+                  label: dirName,
+                  group: 0,
+                  title: `${dir}\nFiles: ${stats.fileCount}\nSize: ${formatSize(stats.totalSize)}${!args.files_only ? `\nLines: ${stats.totalLines}` : ""}`,
+                  value: Math.max(stats.fileCount, 1),
+                });
+
+                const dirParts = dir.split("/").filter((p) => p);
+                if (dirParts.length > 1) {
+                  const parentDir = dirParts.slice(0, -1).join("/");
+                  const parentId = dirToId.get(parentDir);
+                  if (parentId) {
+                    edgesData.push({
+                      from: parentId,
+                      to: id,
+                      arrows: "to",
+                      color: { color: "#667eea" },
+                      title: `contains`,
+                    });
+                  }
                 }
               }
+
+              const filesToShow = summary.details
+                .sort((a, b) => b.size - a.size)
+                .slice(0, 100);
+
+              for (const detail of filesToShow) {
+                const normalizedDir = detail.directory.replace(/\\/g, "/");
+                const filePath = path.join(detail.directory, detail.name);
+                const id = `file_${nodeId++}`;
+                fileToId.set(filePath, id);
+                nodesData.push({
+                  id,
+                  label: detail.name,
+                  group: 1,
+                  title: `${filePath}\nSize: ${formatSize(detail.size)}${!args.files_only && detail.lines !== null ? `\nLines: ${detail.lines}` : ""}\nExtension: ${detail.extension}`,
+                  value: Math.max(Math.floor(detail.size / 100), 1),
+                });
+
+                const dirId = dirToId.get(normalizedDir);
+                if (dirId) {
+                  edgesData.push({
+                    from: dirId,
+                    to: id,
+                    arrows: "to",
+                    color: { color: "#848484" },
+                    title: `contains`,
+                  });
+                }
+              }
+
               const dirs = Object.entries(dirStats);
               const maxFiles = Math.max(
                 ...dirs.map(([, stats]) => stats.fileCount),
+                1,
               );
               const maxSize = Math.max(
                 ...dirs.map(([, stats]) => stats.totalSize),
+                1,
               );
+
               return `<div class="section">
-        <h2>🗺️ Directory Heatmap</h2>
+        <h2>🗺️ Directory Structure Graph</h2>
+        <div id="dependencyGraph"></div>
+        <div class="graph-legend">
+          <div class="legend-item">
+            <span class="legend-color legend-dir"></span>
+            <span>Directories</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-color legend-file"></span>
+            <span>Files</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-color legend-edge"></span>
+            <span>Contains</span>
+          </div>
+        </div>
+        <script type="text/javascript">
+          const graphNodes = new vis.DataSet(${JSON.stringify(nodesData)});
+          const graphEdges = new vis.DataSet(${JSON.stringify(edgesData)});
+
+          const graphData = {
+            nodes: graphNodes,
+            edges: graphEdges
+          };
+
+          const graphOptions = {
+            nodes: {
+              shape: 'dot',
+              size: 20,
+              font: {
+                size: 12,
+                color: '#2d3748'
+              },
+              borderWidth: 2,
+              shadow: true,
+              scaling: {
+                min: 10,
+                max: 30
+              }
+            },
+            edges: {
+              width: 2,
+              shadow: true,
+              smooth: {
+                type: 'continuous',
+                roundness: 0.5
+              },
+              arrows: {
+                to: {
+                  enabled: true,
+                  scaleFactor: 0.5
+                }
+              }
+            },
+            groups: {
+              0: {
+                color: {
+                  background: '#667eea',
+                  border: '#4a5568',
+                  highlight: {
+                    background: '#764ba2',
+                    border: '#4a5568'
+                  }
+                },
+                shape: 'box',
+                size: 25
+              },
+              1: {
+                color: {
+                  background: '#4ec9b0',
+                  border: '#2d3748',
+                  highlight: {
+                    background: '#6ec9b0',
+                    border: '#2d3748'
+                  }
+                },
+                shape: 'dot',
+                size: 15
+              }
+            },
+            physics: {
+              enabled: true,
+              stabilization: {
+                enabled: true,
+                iterations: 200
+              },
+              barnesHut: {
+                gravitationalConstant: -2000,
+                centralGravity: 0.1,
+                springLength: 200,
+                springConstant: 0.04,
+                damping: 0.09
+              }
+            },
+            interaction: {
+              hover: true,
+              tooltipDelay: 100,
+              zoomView: true,
+              dragView: true
+            }
+          };
+
+          const graphContainer = document.getElementById('dependencyGraph');
+          const graphNetwork = new vis.Network(graphContainer, graphData, graphOptions);
+
+          graphNetwork.on('click', function(params) {
+            if (params.nodes.length > 0) {
+              const nodeId = params.nodes[0];
+              const node = graphNodes.get(nodeId);
+              if (node) {
+                console.log('Selected:', node.title);
+              }
+            }
+          });
+        </script>
+      </div>
+      <div class="section">
+        <h2>📊 Directory Heatmap</h2>
         <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; margin-top: 20px;">
           ${dirs
             .map(([dir, stats]) => {
@@ -1317,7 +1696,7 @@ function buildHtmlOutput(summary: Summary, args: Args): string {
           }
           {
             label: 'Files',
-            data: ${JSON.stringify(extensions.map((e) => summary.files_by_extension[e]))},
+            data: ${JSON.stringify(extensions.map((e) => summary.files_by_extension?.[e] || 0))},
             backgroundColor: 'rgba(118, 75, 162, 0.8)',
             borderColor: 'rgba(118, 75, 162, 1)',
             borderWidth: 2
@@ -1424,26 +1803,24 @@ function buildContentForFormat(
   }
 }
 
-function generateFilename(
-  format: OutputFormat,
-  args: Args,
-  index?: number,
-): string {
+function generateFilename(format: OutputFormat, args: Args): string {
   const ext = getFormatExtension(format);
-  let filename: string;
 
-  if (
-    Array.isArray(args.export) &&
-    args.export.length > 1 &&
-    index !== undefined
-  ) {
-    filename = `LocIO-report-${index + 1}.${ext}`;
-  } else {
-    filename = `LocIO-report.${ext}`;
-  }
+  const filename = `LocIO-report.${ext}`;
 
   if (args.export_path) {
-    return path.join(args.export_path, filename);
+    try {
+      const validatedPath = validateExportPath(
+        args.export_path,
+        args.directory,
+      );
+      return path.join(validatedPath, filename);
+    } catch (e) {
+      const error = e instanceof Error ? e : new Error(String(e));
+      throw new Error(
+        `Invalid export path: ${args.export_path}. ${error.message}`,
+      );
+    }
   }
 
   return filename;
@@ -1457,23 +1834,38 @@ function writeReportFile(summary: Summary, args: Args): void {
   for (let i = 0; i < formats.length; i++) {
     const format = formats[i];
     const content = buildContentForFormat(format, summary, args);
-    const filename = generateFilename(format, args, i);
+    const filename = generateFilename(format, args);
 
+    let finalPath: string = filename;
     try {
       let targetDir: string;
+
       if (args.export_path) {
-        targetDir = args.export_path;
+        try {
+          const validatedPath = validateExportPath(
+            args.export_path,
+            args.directory,
+          );
+          targetDir = validatedPath;
+          finalPath = path.join(validatedPath, filename);
+        } catch (e) {
+          const error = e instanceof Error ? e : new Error(String(e));
+          console.error(`\n❌ Invalid export path: ${args.export_path}`);
+          console.error(`📋 Error: ${error.message}`);
+          continue;
+        }
       } else {
         targetDir = path.dirname(filename);
+        finalPath = filename;
       }
 
       if (targetDir !== "." && targetDir !== filename) {
         fs.mkdirSync(targetDir, { recursive: true });
       }
 
-      fs.writeFileSync(filename, content, "utf-8");
+      fs.writeFileSync(finalPath, content, "utf-8");
       if (!args.quiet) {
-        console.log(`Report written to ${filename}`);
+        console.log(`Report written to ${finalPath}`);
       }
     } catch (e) {
       const error = e instanceof Error ? e : new Error(String(e));
@@ -1504,7 +1896,9 @@ function writeReportFile(summary: Summary, args: Args): void {
           "Check if the path is valid and you have write permissions.";
       }
 
-      console.error(`\n❌ Failed to create report file ${filename}`);
+      console.error(
+        `\n❌ Failed to create report file ${finalPath || filename}`,
+      );
       console.error(`📋 Error: ${errorMsg}`);
       if (suggestion) {
         console.error(`\n💡 Suggestion:\n${suggestion}`);

@@ -46,6 +46,9 @@ export interface Args {
   rm_comments: boolean | string;
   top_files?: number;
   top_dirs?: number;
+  collect_details?: boolean;
+  max_details?: number;
+  watch_debounce?: number;
 }
 
 function similarity(str1: string, str2: string): number {
@@ -62,22 +65,30 @@ function levenshteinDistance(str1: string, str2: string): number {
     matrix[i] = [i];
   }
   for (let j = 0; j <= str1.length; j++) {
-    matrix[0][j] = j;
+    const row = matrix[0];
+    if (row) {
+      row[j] = j;
+    }
   }
   for (let i = 1; i <= str2.length; i++) {
+    const currentRow = matrix[i];
+    if (!currentRow) continue;
     for (let j = 1; j <= str1.length; j++) {
+      const prevRow = matrix[i - 1];
+      if (!prevRow) continue;
       if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
-        matrix[i][j] = matrix[i - 1][j - 1];
+        currentRow[j] = prevRow[j - 1] ?? 0;
       } else {
-        matrix[i][j] = Math.min(
-          matrix[i - 1][j - 1] + 1,
-          matrix[i][j - 1] + 1,
-          matrix[i - 1][j] + 1,
+        currentRow[j] = Math.min(
+          (prevRow[j - 1] ?? 0) + 1,
+          (currentRow[j - 1] ?? 0) + 1,
+          (prevRow[j] ?? 0) + 1,
         );
       }
     }
   }
-  return matrix[str2.length][str1.length];
+  const finalRow = matrix[str2.length];
+  return finalRow?.[str1.length] ?? 0;
 }
 
 function findSimilarOptions(
@@ -133,7 +144,7 @@ export function createCommand(): Command {
   ];
 
   program.configureOutput({
-    writeErr: (str) => {
+    writeErr: (str: string) => {
       if (str.includes("unknown option")) {
         const match = str.match(/unknown option ['"]--?([^'"]+)['"]/);
         if (match) {
@@ -230,6 +241,11 @@ export function createCommand(): Command {
       "Specify output directory for exported reports. Files will use default naming (LocIO-report.{ext}). Directories will be created automatically if they don't exist",
     )
     .option("-w, --watch", "Watch directory for changes and auto-rescan")
+    .option(
+      "--watch-debounce <ms>",
+      "Debounce delay for watch mode in milliseconds (default: 500, min: 100, max: 5000)",
+      parseInt,
+    )
     .option("--no-comments", "Disable comment counting (enabled by default)")
     .option(
       "--code-vs-comments",
@@ -256,47 +272,49 @@ export function parseArgs(): Args {
   const options = program.opts();
   const args = program.args;
 
-  const excludeExt = options.excludeExt
-    ? parseCommaSeparated(options.excludeExt)
+  const excludeExt = options["excludeExt"]
+    ? parseCommaSeparated(options["excludeExt"] as string)
     : [];
-  const includeExt = options.includeExt
-    ? parseCommaSeparated(options.includeExt)
+  const includeExt = options["includeExt"]
+    ? parseCommaSeparated(options["includeExt"] as string)
     : [];
 
   return {
     directory: args[0] || ".",
-    files_only: options.filesOnly || false,
-    lines_only: options.linesOnly || false,
-    exclude_patterns: options.exclude || [],
+    files_only: (options["filesOnly"] as boolean) || false,
+    lines_only: (options["linesOnly"] as boolean) || false,
+    exclude_patterns: (options["exclude"] as string[]) || [],
     exclude_extensions: excludeExt,
     include_extensions: includeExt,
-    exclude_dirs: options.excludeDir || [],
-    include_dirs: options.includeDir || [],
-    exclude_names: options.excludeName || [],
-    include_names: options.includeName || [],
-    max_size: options.maxSize,
-    min_size: options.minSize,
-    no_hidden: options.noHidden || false,
-    no_empty: options.noEmpty || false,
-    follow_links: options.followLinks || false,
-    max_depth: options.maxDepth,
-    show_stats: options.stats || false,
-    show_progress: options.noProgress !== true,
-    no_binary: options.noBinary || false,
-    ignore_case: options.ignoreCase || false,
-    quiet: options.quiet || false,
-    export: parseOutputFormat(options.export),
-    export_path: options.exportPath,
+    exclude_dirs: (options["excludeDir"] as string[]) || [],
+    include_dirs: (options["includeDir"] as string[]) || [],
+    exclude_names: (options["excludeName"] as string[]) || [],
+    include_names: (options["includeName"] as string[]) || [],
+    max_size: options["maxSize"] as string | undefined,
+    min_size: options["minSize"] as string | undefined,
+    no_hidden: (options["noHidden"] as boolean) || false,
+    no_empty: (options["noEmpty"] as boolean) || false,
+    follow_links: (options["followLinks"] as boolean) || false,
+    max_depth: options["maxDepth"] as number | undefined,
+    show_stats: (options["stats"] as boolean) || false,
+    show_progress: (options["noProgress"] as boolean) !== true,
+    no_binary: (options["noBinary"] as boolean) || false,
+    ignore_case: (options["ignoreCase"] as boolean) || false,
+    quiet: (options["quiet"] as boolean) || false,
+    export: parseOutputFormat(options["export"] as string | undefined),
+    export_path: options["exportPath"] as string | undefined,
     version: false,
-    watch: options.watch || false,
-    comments: options.noComments !== true,
-    code_vs_comments: options.codeVsComments || false,
+    watch: (options["watch"] as boolean) || false,
+    watch_debounce: options["watchDebounce"] as number | undefined,
+    comments: (options["noComments"] as boolean) !== true,
+    code_vs_comments: (options["codeVsComments"] as boolean) || false,
     rm_comments: (() => {
-      if (!options.rmComments) return false;
-      if (options.rmComments === true) return true;
-      return options.rmComments as string;
+      const rmComments = options["rmComments"];
+      if (!rmComments) return false;
+      if (rmComments === true) return true;
+      return rmComments as string;
     })(),
-    top_files: options.topFiles,
-    top_dirs: options.topDirs,
+    top_files: options["topFiles"] as number | undefined,
+    top_dirs: options["topDirs"] as number | undefined,
   };
 }

@@ -17,8 +17,14 @@ interface CommentPatterns {
   supportsMultiLine: boolean;
 }
 
+const commentPatternsCache = new Map<string, CommentPatterns>();
+
 function getCommentPatterns(extension: string): CommentPatterns {
   const ext = extension.toLowerCase().replace(/^\./, "");
+
+  if (commentPatternsCache.has(ext)) {
+    return commentPatternsCache.get(ext)!;
+  }
 
   const singleLineMarkers: string[] = [];
   let multiLineStart = "";
@@ -201,12 +207,15 @@ function getCommentPatterns(extension: string): CommentPatterns {
       break;
   }
 
-  return {
+  const patterns: CommentPatterns = {
     singleLine: singleLineMarkers,
     multiLineStart,
     multiLineEnd,
     supportsMultiLine,
   };
+
+  commentPatternsCache.set(ext, patterns);
+  return patterns;
 }
 
 enum StringState {
@@ -221,6 +230,7 @@ function findCommentInLine(
   line: string,
   patterns: CommentPatterns,
   inMultiLineComment: boolean,
+  inStringState: StringState = StringState.None,
 ): {
   commentStart: number;
   commentEnd: number;
@@ -229,8 +239,9 @@ function findCommentInLine(
   commentMarker: string;
   hasCodeBefore: boolean;
   hasCodeAfter: boolean;
+  stringState: StringState;
 } | null {
-  let stringState: StringState = StringState.None;
+  let stringState: StringState = inStringState;
   let escapeNext = false;
   let i = 0;
   let regexStartPos = -1;
@@ -367,16 +378,21 @@ function findCommentInLine(
     }
 
     if (stringState === StringState.None) {
+      const beforeLen = singleLineComments.length;
       for (const marker of patterns.singleLine) {
         if (line.substring(i).startsWith(marker)) {
           singleLineComments.push({ pos: i, marker });
           break;
         }
       }
+      if (singleLineComments.length > beforeLen) {
+        break;
+      }
 
       if (patterns.supportsMultiLine && multiLineStartPos === -1) {
         if (line.substring(i).startsWith(patterns.multiLineStart)) {
           multiLineStartPos = i;
+          break;
         }
       }
 
@@ -405,6 +421,7 @@ function findCommentInLine(
         commentMarker: patterns.multiLineEnd,
         hasCodeBefore: beforeComment.length > 0,
         hasCodeAfter: afterComment.length > 0,
+        stringState: StringState.None,
       };
     }
     return {
@@ -415,6 +432,7 @@ function findCommentInLine(
       commentMarker: patterns.multiLineEnd,
       hasCodeBefore: false,
       hasCodeAfter: false,
+      stringState: StringState.None,
     };
   }
 
@@ -436,6 +454,7 @@ function findCommentInLine(
       commentMarker: patterns.multiLineStart,
       hasCodeBefore: beforeComment.length > 0,
       hasCodeAfter: afterComment.length > 0,
+      stringState: StringState.None,
     };
   }
 
@@ -450,15 +469,28 @@ function findCommentInLine(
       commentMarker: comment.marker,
       hasCodeBefore: beforeComment.length > 0,
       hasCodeAfter: false,
+      stringState: StringState.None,
     };
   }
 
-  return null;
+  return {
+    commentStart: 0,
+    commentEnd: 0,
+    isMultiLine: false,
+    endsMultiLine: false,
+    commentMarker: "",
+    hasCodeBefore: false,
+    hasCodeAfter: false,
+    stringState,
+  };
 }
 
-export function countLinesWithComments(filePath: string): CommentStats | null {
+export function countLinesWithComments(
+  filePath: string,
+  content?: string,
+): CommentStats | null {
   try {
-    const contents = fs.readFileSync(filePath, "utf-8");
+    const contents = content || fs.readFileSync(filePath, "utf-8");
     const lines = contents.split(/\r?\n/);
 
     const extension = path.extname(filePath);
@@ -472,6 +504,7 @@ export function countLinesWithComments(filePath: string): CommentStats | null {
     let blankLines = 0;
 
     let inMultiLineComment = false;
+    let stringState: StringState = StringState.None;
 
     for (const line of lines) {
       const trimmed = line.trim();
@@ -486,9 +519,18 @@ export function countLinesWithComments(filePath: string): CommentStats | null {
         continue;
       }
 
-      const commentInfo = findCommentInLine(line, patterns, inMultiLineComment);
+      const commentInfo = findCommentInLine(
+        line,
+        patterns,
+        inMultiLineComment,
+        stringState,
+      );
 
       if (commentInfo) {
+        stringState = commentInfo.stringState;
+      }
+
+      if (commentInfo && commentInfo.commentMarker) {
         if (commentInfo.isMultiLine) {
           if (commentInfo.endsMultiLine) {
             inMultiLineComment = false;

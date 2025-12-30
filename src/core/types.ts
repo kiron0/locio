@@ -29,6 +29,8 @@ export interface Summary {
   inline_comments_by_extension?: Record<string, number>;
   size_by_extension: Record<string, number>;
   details: FileDetail[];
+
+  _commentsRemoved?: number;
 }
 
 export function createSummary(): Summary {

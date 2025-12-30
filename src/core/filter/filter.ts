@@ -23,6 +23,13 @@ export interface FilterPatterns {
   exclude_names: RegExp[];
   include_names: RegExp[];
   detected_project_type?: ProjectType;
+
+  exclude_extensions_set?: Set<string>;
+  include_extensions_set?: Set<string>;
+
+  combined_exclude_patterns?: RegExp | null;
+  combined_exclude_dirs?: RegExp | null;
+  combined_exclude_names?: RegExp | null;
 }
 
 export function createFilterPatterns(
@@ -63,10 +70,12 @@ export function createFilterPatterns(
       ...loadDefaultIgnoredExtensions(),
     ];
     const uniqueExcludeExt = Array.from(new Set(exclude_extensions)).sort();
+    const excludeExtensionsSet = new Set(uniqueExcludeExt);
 
     const include_extensions: string[] = args.include_extensions.map((e) =>
       e.replace(/^\./, "").toLowerCase(),
     );
+    const includeExtensionsSet = new Set(include_extensions);
 
     const exclude_dirs_patterns: string[] = [
       ...args.exclude_dirs,
@@ -92,6 +101,30 @@ export function createFilterPatterns(
       return new RegExp(p, args.ignore_case ? "i" : undefined);
     });
 
+    const combinedExcludePatterns =
+      exclude_patterns.length > 0
+        ? new RegExp(
+            exclude_patterns.map((p) => `(?:${p.source})`).join("|"),
+            args.ignore_case ? "i" : undefined,
+          )
+        : null;
+
+    const combinedExcludeDirs =
+      exclude_dirs.length > 0
+        ? new RegExp(
+            exclude_dirs.map((p) => `(?:${p.source})`).join("|"),
+            args.ignore_case ? "i" : undefined,
+          )
+        : null;
+
+    const combinedExcludeNames =
+      exclude_names.length > 0
+        ? new RegExp(
+            exclude_names.map((p) => `(?:${p.source})`).join("|"),
+            args.ignore_case ? "i" : undefined,
+          )
+        : null;
+
     return {
       exclude_patterns,
       exclude_extensions: uniqueExcludeExt,
@@ -101,6 +134,12 @@ export function createFilterPatterns(
       exclude_names,
       include_names,
       detected_project_type: detectedProjectType,
+
+      exclude_extensions_set: excludeExtensionsSet,
+      include_extensions_set: includeExtensionsSet,
+      combined_exclude_patterns: combinedExcludePatterns,
+      combined_exclude_dirs: combinedExcludeDirs,
+      combined_exclude_names: combinedExcludeNames,
     };
   } catch (e) {
     if (e instanceof LineCounterError) {
@@ -120,21 +159,40 @@ export function shouldExcludeFile(
   const pathStr = filePath;
   const fileName = path.basename(filePath);
 
-  for (const pattern of patterns.exclude_patterns) {
-    if (pattern.test(pathStr)) {
+  if (patterns.combined_exclude_patterns) {
+    if (patterns.combined_exclude_patterns.test(pathStr)) {
       return true;
+    }
+  } else {
+    for (const pattern of patterns.exclude_patterns) {
+      if (pattern.test(pathStr)) {
+        return true;
+      }
     }
   }
 
   const ext = path.extname(filePath).replace(/^\./, "").toLowerCase();
   if (ext) {
-    for (const excludeExt of patterns.exclude_extensions) {
-      if (ext === excludeExt.toLowerCase()) {
+    if (patterns.exclude_extensions_set) {
+      if (patterns.exclude_extensions_set.has(ext)) {
         return true;
+      }
+    } else {
+      for (const excludeExt of patterns.exclude_extensions) {
+        if (ext === excludeExt.toLowerCase()) {
+          return true;
+        }
       }
     }
 
-    if (patterns.include_extensions.length > 0) {
+    if (
+      patterns.include_extensions_set &&
+      patterns.include_extensions_set.size > 0
+    ) {
+      if (!patterns.include_extensions_set.has(ext)) {
+        return true;
+      }
+    } else if (patterns.include_extensions.length > 0) {
       let matches = false;
       for (const includeExt of patterns.include_extensions) {
         if (ext === includeExt.toLowerCase()) {
@@ -146,14 +204,25 @@ export function shouldExcludeFile(
         return true;
       }
     }
-  } else if (patterns.include_extensions.length > 0) {
+  } else if (
+    (patterns.include_extensions_set &&
+      patterns.include_extensions_set.size > 0) ||
+    patterns.include_extensions.length > 0
+  ) {
     return true;
   }
 
   const parentDir = path.dirname(filePath);
-  for (const pattern of patterns.exclude_dirs) {
-    if (pattern.test(parentDir)) {
+
+  if (patterns.combined_exclude_dirs) {
+    if (patterns.combined_exclude_dirs.test(parentDir)) {
       return true;
+    }
+  } else {
+    for (const pattern of patterns.exclude_dirs) {
+      if (pattern.test(parentDir)) {
+        return true;
+      }
     }
   }
 
@@ -170,9 +239,15 @@ export function shouldExcludeFile(
     }
   }
 
-  for (const pattern of patterns.exclude_names) {
-    if (pattern.test(fileName)) {
+  if (patterns.combined_exclude_names) {
+    if (patterns.combined_exclude_names.test(fileName)) {
       return true;
+    }
+  } else {
+    for (const pattern of patterns.exclude_names) {
+      if (pattern.test(fileName)) {
+        return true;
+      }
     }
   }
 

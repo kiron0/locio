@@ -3,15 +3,19 @@
   "version": "1.0.1",
   "description": "A powerful CLI tool to count lines and files in directories with extensive filtering options",
   "type": "module",
-  "main": "dist/index.js",
   "bin": {
     "locio": "./dist/index.js"
   },
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "start": "node dist/index.js",
-    "build": "rm -rf dist && tsup",
+    "build": "tsup",
     "build:watch": "tsup --watch",
-    "format": "prettier --write \"**/*.{js,json,ts,md}\""
+    "format": "prettier --write \"**/*.{js,json,ts,md}\"",
+    "test": "vitest run",
+    "benchmark": "vitest run tests/benchmarks"
   },
   "keywords": [
     "cli",
@@ -34,6 +38,9 @@
     "url": "https://github.com/kiron0/locio.git"
   },
   "homepage": "https://locio.js.org",
+  "bugs": {
+    "url": "https://github.com/kiron0/locio/issues"
+  },
   "dependencies": {
     "commander": "^14.0.2",
     "chalk": "^5.6.2",
@@ -45,6 +52,7 @@
     "prettier": "^3.7.4",
     "terser": "^5.44.1",
     "tsup": "^8.5.1",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.16"
   }
 }
