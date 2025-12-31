@@ -1,6 +1,6 @@
 # LocIO Test Suite
 
-This directory contains the test suite for LocIO, following the structure and patterns from the unreach package.
+This directory contains the test suite for LocIO.
 
 ## Test Structure
 

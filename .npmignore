@@ -24,3 +24,5 @@ tests/
 *.enum.ts
 *.constant.ts
 *.config.ts
+
+reports/

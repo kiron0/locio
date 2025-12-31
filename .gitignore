@@ -70,7 +70,4 @@ coverage/
 *.temp
 
 # Report files
-locio-report.*
-
-.unreach
-
+reports/

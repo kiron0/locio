@@ -26,16 +26,29 @@ const SENSITIVE_DIRECTORIES = new Set([
 
 export function isPathSafe(filePath: string, baseDir: string): boolean {
   try {
-    const resolvedPath = path.resolve(filePath);
-    const resolvedBase = path.resolve(baseDir);
-
-    const relative = path.relative(resolvedBase, resolvedPath);
-
-    if (relative.includes("..")) {
+    if (filePath.includes("\0")) {
       return false;
     }
 
-    if (filePath.includes("\0")) {
+    const normalizedPath = filePath.replace(/\\/g, "/");
+    const normalizedBase = baseDir.replace(/\\/g, "/");
+
+    const resolvedPath = path.resolve(normalizedPath);
+    const resolvedBase = path.resolve(normalizedBase);
+
+    const relative = path.relative(resolvedBase, resolvedPath);
+
+    if (relative.includes("..") || path.isAbsolute(relative)) {
+      return false;
+    }
+
+    const resolvedPathNormalized = resolvedPath.replace(/\\/g, "/");
+    const resolvedBaseNormalized = resolvedBase.replace(/\\/g, "/");
+
+    if (
+      !resolvedPathNormalized.startsWith(resolvedBaseNormalized + "/") &&
+      resolvedPathNormalized !== resolvedBaseNormalized
+    ) {
       return false;
     }
 

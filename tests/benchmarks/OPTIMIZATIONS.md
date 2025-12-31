@@ -41,10 +41,10 @@ This document outlines potential optimizations, improvements, and best practices
 ### 1. **Parallel File Processing** ✅ **IMPLEMENTED**
 
 **Current State**: Files are processed sequentially in `scanner.ts` using a `for` loop
-**Improvement**: Implement batched parallel processing similar to unreach's approach
+**Improvement**: Implement batched parallel processing approach
 **Status**: ✅ Completed - Files now process in parallel batches using `Promise.allSettled()` with concurrency capped at CPU count
 
-**Implementation Strategy** (inspired by unreach's `graph.ts:175-212`):
+**Implementation Strategy**:
 
 ```typescript
 // Add helper method to chunk array
@@ -593,7 +593,7 @@ if (filesChecked % UPDATE_INTERVAL === 0 || filesChecked === files.length) {
 **Improvement**: Incremental scanning with file hash tracking
 **Status**: ✅ Completed - `WatchCache` class implemented with file hash tracking using SHA256 and mtime checks for efficient change detection
 
-**Implementation Strategy** (inspired by unreach's caching approach):
+**Implementation Strategy**:
 
 ```typescript
 import * as crypto from "crypto";
