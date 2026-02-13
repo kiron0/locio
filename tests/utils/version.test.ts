@@ -1,6 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getPackageVersion } from "../../src/utils/version.js";
 import {
   createTempDir,
@@ -9,16 +9,14 @@ import {
 } from "./test-helpers.js";
 
 describe("getPackageVersion", () => {
-  let originalCwd: string;
   let tempDir: string;
 
   beforeEach(() => {
-    originalCwd = process.cwd();
     tempDir = createTempDir();
   });
 
   afterEach(() => {
-    process.chdir(originalCwd);
+    vi.restoreAllMocks();
     removeTempDir(tempDir);
   });
 
@@ -29,14 +27,14 @@ describe("getPackageVersion", () => {
   });
 
   it("should return default version if package.json not found", () => {
-    process.chdir(tempDir);
+    vi.spyOn(process, "cwd").mockReturnValue(tempDir);
     const version = getPackageVersion();
 
     expect(typeof version).toBe("string");
   });
 
   it("should read version from package.json in current directory", () => {
-    process.chdir(tempDir);
+    vi.spyOn(process, "cwd").mockReturnValue(tempDir);
     createTestFile(
       tempDir,
       "package.json",
@@ -49,7 +47,7 @@ describe("getPackageVersion", () => {
   });
 
   it("should handle invalid JSON gracefully", () => {
-    process.chdir(tempDir);
+    vi.spyOn(process, "cwd").mockReturnValue(tempDir);
     createTestFile(tempDir, "package.json", "invalid json");
     const version = getPackageVersion();
 

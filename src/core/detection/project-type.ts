@@ -75,6 +75,8 @@ const PROJECT_TYPE_DETECTORS: Array<{
     files: [
       "vue.config.js",
       "vue.config.ts",
+      "nuxt.config.js",
+      "nuxt.config.ts",
       "vite.config.js",
       "vite.config.ts",
     ],
@@ -122,6 +124,7 @@ const PROJECT_TYPE_DETECTORS: Array<{
       "manage.py",
       "setup.cfg",
       "Pipfile.lock",
+      "tox.ini",
     ],
     dirs: ["__pycache__"],
     priority: 100,
@@ -133,8 +136,24 @@ const PROJECT_TYPE_DETECTORS: Array<{
   },
   {
     type: ProjectType.Java,
-    files: ["pom.xml", "build.gradle", "build.gradle.kts", "settings.gradle"],
-    dirs: [".gradle"],
+    files: [
+      "pom.xml",
+      "build.gradle",
+      "build.gradle.kts",
+      "settings.gradle",
+      "settings.gradle.kts",
+      "build.xml",
+      ".classpath",
+      "gradlew",
+      "mvnw",
+    ],
+    dirs: [
+      ".gradle",
+      "WEB-INF",
+      "META-INF",
+      "src/main/java",
+      "src/main/webapp",
+    ],
     priority: 100,
   },
   {
@@ -145,7 +164,7 @@ const PROJECT_TYPE_DETECTORS: Array<{
   },
   {
     type: ProjectType.Ruby,
-    files: ["Gemfile", "Rakefile", "Gemfile.lock"],
+    files: ["Gemfile", "Rakefile", "Gemfile.lock", "config.ru"],
     dirs: [".bundle"],
     priority: 100,
   },
@@ -163,7 +182,7 @@ const PROJECT_TYPE_DETECTORS: Array<{
   },
   {
     type: ProjectType.Kotlin,
-    files: ["build.gradle.kts", "settings.gradle.kts"],
+    files: ["build.gradle.kts", "settings.gradle.kts", "gradlew"],
     dirs: [".gradle"],
     priority: 100,
   },
@@ -351,125 +370,138 @@ const PROJECT_EXCLUDES: Record<ProjectType, ProjectExcludes> = {
   },
 };
 
-function readPackageJson(searchPath: string): PackageJson | null {
-  const packageJsonPath = path.join(searchPath, "package.json");
-  try {
-    if (fs.existsSync(packageJsonPath)) {
-      const content = fs.readFileSync(packageJsonPath, "utf-8");
-      return JSON.parse(content) as PackageJson;
-    }
-  } catch {}
-  return null;
+const SOURCE_EXTENSION_MAP: Record<string, ProjectType> = {
+  ".java": ProjectType.Java,
+  ".jsp": ProjectType.Java,
+  ".jspx": ProjectType.Java,
+  ".py": ProjectType.Python,
+  ".pyw": ProjectType.Python,
+  ".rs": ProjectType.Rust,
+  ".go": ProjectType.Go,
+  ".cs": ProjectType.CSharp,
+  ".rb": ProjectType.Ruby,
+  ".erb": ProjectType.Ruby,
+  ".php": ProjectType.PHP,
+  ".phtml": ProjectType.PHP,
+  ".swift": ProjectType.Swift,
+  ".kt": ProjectType.Kotlin,
+  ".kts": ProjectType.Kotlin,
+  ".dart": ProjectType.Dart,
+};
+
+const SOURCE_SCAN_SKIP_DIRS = new Set([
+  "node_modules",
+  "target",
+  "build",
+  "dist",
+  "vendor",
+  "__pycache__",
+  ".gradle",
+  ".idea",
+  ".vs",
+  ".git",
+  ".svn",
+  "bin",
+  "obj",
+  "out",
+  ".next",
+  ".nuxt",
+  ".cache",
+  ".dart_tool",
+  ".build",
+  ".cargo",
+  "coverage",
+  ".nyc_output",
+  ".venv",
+  "venv",
+  "env",
+  "tmp",
+  "log",
+  "logs",
+  "DerivedData",
+  ".swiftpm",
+]);
+
+interface SourceScanResult {
+  typeCounts: Map<ProjectType, { count: number; extensions: Set<string> }>;
+  hasTypeScriptFiles: boolean;
+  hasJsxInRoot: boolean;
 }
 
-function hasDependency(
-  pkg: PackageJson | null,
-  deps: string[] | undefined,
-  devDeps: string[] | undefined,
-): boolean {
-  if (!pkg || (!deps && !devDeps)) return false;
-
-  const allDeps = {
-    ...(pkg.dependencies || {}),
-    ...(pkg.devDependencies || {}),
+function scanSourceFiles(
+  searchPath: string,
+  maxDepth: number = 3,
+  maxFiles: number = 500,
+): SourceScanResult {
+  const result: SourceScanResult = {
+    typeCounts: new Map(),
+    hasTypeScriptFiles: false,
+    hasJsxInRoot: false,
   };
+  let filesScanned = 0;
 
-  if (deps) {
-    for (const dep of deps) {
-      if (allDeps[dep]) return true;
-    }
-  }
-
-  if (devDeps) {
-    for (const dep of devDeps) {
-      if (allDeps[dep]) return true;
-    }
-  }
-
-  return false;
-}
-
-function hasScript(
-  pkg: PackageJson | null,
-  scripts: string[] | undefined,
-): boolean {
-  if (!pkg || !scripts || !pkg.scripts) return false;
-
-  for (const script of scripts) {
-    if (pkg.scripts[script]) return true;
-  }
-
-  return false;
-}
-
-function checkFileExists(searchPath: string, fileName: string): boolean {
-  if (fileName.includes("*")) {
+  function scan(dir: string, depth: number) {
+    if (depth > maxDepth || filesScanned >= maxFiles) return;
     try {
-      const entries = fs.readdirSync(searchPath);
-      const pattern = fileName.replace(/\*/g, ".*");
-      const regex = new RegExp(`^${pattern}$`);
-      return entries.some((entry) => {
-        const entryPath = path.join(searchPath, entry);
-        try {
-          const stats = fs.statSync(entryPath);
-          return (stats.isFile() || stats.isDirectory()) && regex.test(entry);
-        } catch {
-          return false;
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (filesScanned >= maxFiles) return;
+        if (entry.name.startsWith(".")) continue;
+
+        if (entry.isFile()) {
+          filesScanned++;
+          const ext = path.extname(entry.name).toLowerCase();
+
+          if (ext === ".ts" || ext === ".tsx") {
+            result.hasTypeScriptFiles = true;
+          }
+
+          if (depth === 0 && (ext === ".jsx" || ext === ".tsx")) {
+            result.hasJsxInRoot = true;
+          }
+
+          const projectType = SOURCE_EXTENSION_MAP[ext];
+          if (projectType) {
+            const existing = result.typeCounts.get(projectType) || {
+              count: 0,
+              extensions: new Set<string>(),
+            };
+            existing.count++;
+            existing.extensions.add(ext);
+            result.typeCounts.set(projectType, existing);
+          }
+        } else if (
+          entry.isDirectory() &&
+          !SOURCE_SCAN_SKIP_DIRS.has(entry.name.toLowerCase())
+        ) {
+          scan(path.join(dir, entry.name), depth + 1);
         }
-      });
-    } catch {
-      return false;
-    }
-  } else {
-    const filePath = path.join(searchPath, fileName);
-    try {
-      if (fs.existsSync(filePath)) {
-        const stats = fs.statSync(filePath);
-        return stats.isFile();
       }
     } catch {}
   }
-  return false;
+
+  scan(searchPath, 0);
+  return result;
 }
 
-function checkDirExists(searchPath: string, dirName: string): boolean {
-  const dirPath = path.join(searchPath, dirName);
+function readPackageJson(searchPath: string): PackageJson | null {
   try {
-    if (fs.existsSync(dirPath)) {
-      const stats = fs.statSync(dirPath);
-      return stats.isDirectory();
-    }
-  } catch {}
-  return false;
+    const content = fs.readFileSync(
+      path.join(searchPath, "package.json"),
+      "utf-8",
+    );
+    return JSON.parse(content) as PackageJson;
+  } catch {
+    return null;
+  }
 }
 
-function hasTypeScriptFiles(searchPath: string, maxDepth: number = 2): boolean {
+function checkNestedDir(searchPath: string, subPath: string): boolean {
   try {
-    const entries = fs.readdirSync(searchPath);
-    for (const entry of entries) {
-      const entryPath = path.join(searchPath, entry);
-      try {
-        const stats = fs.statSync(entryPath);
-        if (
-          stats.isFile() &&
-          (entry.endsWith(".ts") || entry.endsWith(".tsx"))
-        ) {
-          return true;
-        }
-        if (
-          stats.isDirectory() &&
-          maxDepth > 0 &&
-          !entry.startsWith(".") &&
-          entry !== "node_modules"
-        ) {
-          if (hasTypeScriptFiles(entryPath, maxDepth - 1)) {
-            return true;
-          }
-        }
-      } catch {}
-    }
-  } catch {}
-  return false;
+    return fs.statSync(path.join(searchPath, subPath)).isDirectory();
+  } catch {
+    return false;
+  }
 }
 
 function detectProjectTypeAdvanced(directory: string): DetectionScore[] {
@@ -477,21 +509,53 @@ function detectProjectTypeAdvanced(directory: string): DetectionScore[] {
 
   let searchPath = absPath;
   try {
-    const stats = fs.statSync(absPath);
-    if (stats.isFile()) {
+    if (fs.statSync(absPath).isFile()) {
       searchPath = path.dirname(absPath);
     }
   } catch {}
 
+  let rootEntries: fs.Dirent[];
+  try {
+    rootEntries = fs.readdirSync(searchPath, { withFileTypes: true });
+  } catch {
+    rootEntries = [];
+  }
+
+  const rootFiles = new Set<string>();
+  const rootDirs = new Set<string>();
+  for (const entry of rootEntries) {
+    if (entry.isFile()) rootFiles.add(entry.name);
+    else if (entry.isDirectory()) rootDirs.add(entry.name);
+  }
+
+  const pkg = rootFiles.has("package.json")
+    ? readPackageJson(searchPath)
+    : null;
+  const mergedDeps: Record<string, string> = pkg
+    ? { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) }
+    : {};
+
+  const sourceScan = scanSourceFiles(searchPath);
+
   const scores: Map<ProjectType, DetectionScore> = new Map();
-  const pkg = readPackageJson(searchPath);
 
   for (const detector of PROJECT_TYPE_DETECTORS) {
     let score = 0;
     const indicators: string[] = [];
 
     for (const file of detector.files) {
-      if (checkFileExists(searchPath, file)) {
+      if (file.includes("*")) {
+        const pattern = new RegExp(
+          "^" + file.replace(/\./g, "\\.").replace(/\*/g, ".*") + "$",
+        );
+        const matched = rootEntries.some(
+          (e) => (e.isFile() || e.isDirectory()) && pattern.test(e.name),
+        );
+        if (matched) {
+          score += 30;
+          indicators.push(`file:${file}`);
+        }
+      } else if (rootFiles.has(file)) {
         score += 30;
         indicators.push(`file:${file}`);
       }
@@ -499,53 +563,52 @@ function detectProjectTypeAdvanced(directory: string): DetectionScore[] {
 
     if (detector.dirs) {
       for (const dir of detector.dirs) {
-        if (checkDirExists(searchPath, dir)) {
+        const exists = dir.includes("/")
+          ? checkNestedDir(searchPath, dir)
+          : rootDirs.has(dir);
+        if (exists) {
           score += 20;
           indicators.push(`dir:${dir}`);
         }
       }
     }
 
-    if (detector.packageJsonDeps || detector.packageJsonDevDeps) {
-      if (
-        hasDependency(
-          pkg,
-          detector.packageJsonDeps,
-          detector.packageJsonDevDeps,
-        )
-      ) {
+    if (pkg && (detector.packageJsonDeps || detector.packageJsonDevDeps)) {
+      const depsToCheck = [
+        ...(detector.packageJsonDeps || []),
+        ...(detector.packageJsonDevDeps || []),
+      ];
+      if (depsToCheck.some((dep) => mergedDeps[dep])) {
         score += 50;
-        const deps = [
-          ...(detector.packageJsonDeps || []),
-          ...(detector.packageJsonDevDeps || []),
-        ];
-        indicators.push(`dep:${deps.join(",")}`);
+        indicators.push(`dep:${depsToCheck.join(",")}`);
       }
     }
 
-    if (detector.packageJsonScripts) {
-      if (hasScript(pkg, detector.packageJsonScripts)) {
+    if (detector.packageJsonScripts && pkg?.scripts) {
+      if (detector.packageJsonScripts.some((s) => pkg.scripts![s])) {
         score += 15;
         indicators.push(`script:${detector.packageJsonScripts.join(",")}`);
       }
     }
 
     if (detector.type === ProjectType.TypeScript) {
-      if (checkFileExists(searchPath, "tsconfig.json")) {
-        score += 30;
-        indicators.push("file:tsconfig.json");
-      }
-      if (hasTypeScriptFiles(searchPath)) {
+      if (sourceScan.hasTypeScriptFiles) {
         score += 20;
         indicators.push("typescript-files");
       }
-      if (pkg && checkFileExists(searchPath, "package.json")) {
-        const hasBackendDeps = hasDependency(
-          pkg,
-          ["express", "koa", "fastify", "nest", "@nestjs/core"],
-          ["ts-node", "ts-node-dev"],
-        );
-        if (hasBackendDeps) {
+      if (pkg) {
+        const backendDeps = [
+          "express",
+          "koa",
+          "fastify",
+          "nest",
+          "@nestjs/core",
+        ];
+        const backendDevDeps = ["ts-node", "ts-node-dev"];
+        if (
+          backendDeps.some((d) => mergedDeps[d]) ||
+          backendDevDeps.some((d) => mergedDeps[d])
+        ) {
           score = Math.floor(score * 0.5);
           indicators.push("nodejs-backend-penalty");
         }
@@ -554,9 +617,8 @@ function detectProjectTypeAdvanced(directory: string): DetectionScore[] {
 
     if (detector.type === ProjectType.NodeJS) {
       if (
-        checkFileExists(searchPath, "package.json") &&
-        (checkFileExists(searchPath, "tsconfig.json") ||
-          hasTypeScriptFiles(searchPath))
+        rootFiles.has("package.json") &&
+        (rootFiles.has("tsconfig.json") || sourceScan.hasTypeScriptFiles)
       ) {
         score += 40;
         indicators.push("nodejs-with-typescript");
@@ -564,34 +626,56 @@ function detectProjectTypeAdvanced(directory: string): DetectionScore[] {
     }
 
     if (detector.type === ProjectType.React) {
-      try {
-        const entries = fs.readdirSync(searchPath);
-        const hasJsx = entries.some((entry) => {
-          const entryPath = path.join(searchPath, entry);
-          try {
-            const stats = fs.statSync(entryPath);
-            return (
-              stats.isFile() &&
-              (entry.endsWith(".jsx") || entry.endsWith(".tsx"))
-            );
-          } catch {
-            return false;
-          }
-        });
-        if (hasJsx) {
-          score += 15;
-          indicators.push("jsx-files");
-        }
-      } catch {}
+      if (sourceScan.hasJsxInRoot) {
+        score += 15;
+        indicators.push("jsx-files");
+      }
+    }
+
+    if (detector.type === ProjectType.Kotlin) {
+      const javaInfo = sourceScan.typeCounts.get(ProjectType.Java);
+      const ktInfo = sourceScan.typeCounts.get(ProjectType.Kotlin);
+      if (javaInfo && (!ktInfo || javaInfo.count > ktInfo.count * 2)) {
+        score = Math.floor(score * 0.4);
+        indicators.push("java-dominant-penalty");
+      }
+    }
+
+    if (detector.type === ProjectType.Java) {
+      const ktInfo = sourceScan.typeCounts.get(ProjectType.Kotlin);
+      const javaInfo = sourceScan.typeCounts.get(ProjectType.Java);
+      if (ktInfo && (!javaInfo || ktInfo.count > javaInfo.count * 2)) {
+        score = Math.floor(score * 0.4);
+        indicators.push("kotlin-dominant-penalty");
+      }
     }
 
     score = Math.floor(score * (1 + detector.priority / 100));
 
     if (score > 0) {
-      scores.set(detector.type, {
-        type: detector.type,
-        score,
-        indicators,
+      scores.set(detector.type, { type: detector.type, score, indicators });
+    }
+  }
+
+  for (const [projectType, info] of sourceScan.typeCounts) {
+    const fileScore = Math.min(info.count * 2, 40);
+    const extensionBonus = info.extensions.size > 1 ? 10 : 0;
+    const totalBoost = fileScore + extensionBonus;
+    const extList = Array.from(info.extensions).join(",");
+
+    const existing = scores.get(projectType);
+    if (existing) {
+      existing.score += totalBoost;
+      existing.indicators.push(`source-files:${info.count}(${extList})`);
+    } else {
+      const detector = PROJECT_TYPE_DETECTORS.find(
+        (d) => d.type === projectType,
+      );
+      const priority = detector?.priority || 50;
+      scores.set(projectType, {
+        type: projectType,
+        score: Math.floor(totalBoost * (1 + priority / 100)),
+        indicators: [`source-files:${info.count}(${extList})`],
       });
     }
   }
@@ -607,24 +691,27 @@ function detectProjectTypeAdvanced(directory: string): DetectionScore[] {
 
     if (!hasJsFramework) {
       const hasTsConfig =
-        checkFileExists(searchPath, "tsconfig.json") ||
-        hasTypeScriptFiles(searchPath);
+        rootFiles.has("tsconfig.json") || sourceScan.hasTypeScriptFiles;
 
-      if (hasTsConfig && checkFileExists(searchPath, "package.json")) {
-        const hasBackendDeps = hasDependency(
-          pkg,
-          ["express", "koa", "fastify", "nest", "@nestjs/core"],
-          ["ts-node", "ts-node-dev"],
-        );
+      if (hasTsConfig && rootFiles.has("package.json")) {
+        const backendDeps = [
+          "express",
+          "koa",
+          "fastify",
+          "nest",
+          "@nestjs/core",
+        ];
+        const backendDevDeps = ["ts-node", "ts-node-dev"];
+        const hasBackendDeps =
+          backendDeps.some((d) => mergedDeps[d]) ||
+          backendDevDeps.some((d) => mergedDeps[d]);
 
-        if (hasBackendDeps) {
-          if (!scores.has(ProjectType.NodeJS)) {
-            scores.set(ProjectType.NodeJS, {
-              type: ProjectType.NodeJS,
-              score: 55,
-              indicators: ["package.json", "nodejs-backend-with-typescript"],
-            });
-          }
+        if (hasBackendDeps && !scores.has(ProjectType.NodeJS)) {
+          scores.set(ProjectType.NodeJS, {
+            type: ProjectType.NodeJS,
+            score: 55,
+            indicators: ["package.json", "nodejs-backend-with-typescript"],
+          });
         }
         if (!scores.has(ProjectType.TypeScript)) {
           scores.set(ProjectType.TypeScript, {
@@ -649,6 +736,43 @@ function detectProjectTypeAdvanced(directory: string): DetectionScore[] {
             indicators: ["package.json"],
           });
         }
+      }
+    }
+  }
+
+  const jsGenericTypes = [ProjectType.NodeJS, ProjectType.TypeScript];
+  const nonJsTypes = [
+    ProjectType.Java,
+    ProjectType.Python,
+    ProjectType.Rust,
+    ProjectType.Go,
+    ProjectType.CSharp,
+    ProjectType.Ruby,
+    ProjectType.PHP,
+    ProjectType.Swift,
+    ProjectType.Kotlin,
+    ProjectType.Dart,
+  ];
+
+  for (const jsType of jsGenericTypes) {
+    const jsScore = scores.get(jsType);
+    if (!jsScore) continue;
+
+    const dominantNonJs = nonJsTypes.find((type) => {
+      const s = scores.get(type);
+      return s && s.score > jsScore.score;
+    });
+
+    if (dominantNonJs) {
+      const hasStrongSignals = jsScore.indicators.some(
+        (i) =>
+          i.startsWith("dep:") ||
+          i.startsWith("script:") ||
+          i === "nodejs-backend-with-typescript",
+      );
+      if (!hasStrongSignals) {
+        jsScore.score = Math.floor(jsScore.score * 0.3);
+        jsScore.indicators.push(`penalized:dominant-${dominantNonJs}`);
       }
     }
   }

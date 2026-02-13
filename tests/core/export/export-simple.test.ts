@@ -1,6 +1,5 @@
 import * as fs from "fs";
 import * as path from "path";
-import * as process from "process";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { OutputFormat } from "../../../src/cli/args.js";
 import { exportReport } from "../../../src/core/export/export.js";
@@ -17,10 +16,13 @@ describe("Export Functionality - Simple Tests", () => {
 
   afterEach(() => {
     try {
-      const files = fs.readdirSync(tempDir);
-      for (const file of files) {
-        if (file.startsWith("LocIO-report")) {
-          fs.unlinkSync(path.join(tempDir, file));
+      const reportsDir = path.join(tempDir, "reports");
+      if (fs.existsSync(reportsDir)) {
+        const files = fs.readdirSync(reportsDir);
+        for (const file of files) {
+          if (file.startsWith("LocIO-report")) {
+            fs.unlinkSync(path.join(reportsDir, file));
+          }
         }
       }
     } catch {}
@@ -87,8 +89,12 @@ describe("Export Functionality - Simple Tests", () => {
       code_vs_comments: false,
       rm_comments: false,
       export: exportFormat,
-      export_path: undefined,
+      export_path: undefined as string | undefined,
     };
+  }
+
+  function getReportPath(filename: string): string {
+    return path.join(tempDir, "reports", filename);
   }
 
   describe("JSON Export", () => {
@@ -96,24 +102,17 @@ describe("Export Functionality - Simple Tests", () => {
       const summary = createTestSummary();
       const args = createTestArgs(OutputFormat.Json);
 
-      const originalCwd = process.cwd();
-      process.chdir(tempDir);
+      exportReport(summary, args);
 
-      try {
-        exportReport(summary, args);
+      const jsonFile = getReportPath("LocIO-report.json");
+      expect(fs.existsSync(jsonFile)).toBe(true);
 
-        const jsonFile = path.join(tempDir, "LocIO-report.json");
-        expect(fs.existsSync(jsonFile)).toBe(true);
+      const content = fs.readFileSync(jsonFile, "utf-8");
+      const data = JSON.parse(content);
 
-        const content = fs.readFileSync(jsonFile, "utf-8");
-        const data = JSON.parse(content);
-
-        expect(data.files).toBe(3);
-        expect(data.lines).toBe(15);
-        expect(data.size).toBe(150);
-      } finally {
-        process.chdir(originalCwd);
-      }
+      expect(data.files).toBe(3);
+      expect(data.lines).toBe(15);
+      expect(data.size).toBe(150);
     });
 
     it("should include extension statistics when show_stats is true", () => {
@@ -121,25 +120,18 @@ describe("Export Functionality - Simple Tests", () => {
       const args = createTestArgs(OutputFormat.Json);
       args.show_stats = true;
 
-      const originalCwd = process.cwd();
-      process.chdir(tempDir);
+      exportReport(summary, args);
 
-      try {
-        exportReport(summary, args);
+      const jsonFile = getReportPath("LocIO-report.json");
+      if (fs.existsSync(jsonFile)) {
+        const content = fs.readFileSync(jsonFile, "utf-8");
+        const data = JSON.parse(content);
 
-        const jsonFile = path.join(tempDir, "LocIO-report.json");
-        if (fs.existsSync(jsonFile)) {
-          const content = fs.readFileSync(jsonFile, "utf-8");
-          const data = JSON.parse(content);
-
-          expect(data.stats).toBeDefined();
-          if (data.stats) {
-            expect(data.stats.ts).toBeDefined();
-            expect(data.stats.ts.files).toBe(2);
-          }
+        expect(data.stats).toBeDefined();
+        if (data.stats) {
+          expect(data.stats.ts).toBeDefined();
+          expect(data.stats.ts.files).toBe(2);
         }
-      } finally {
-        process.chdir(originalCwd);
       }
     });
   });
@@ -149,44 +141,30 @@ describe("Export Functionality - Simple Tests", () => {
       const summary = createTestSummary();
       const args = createTestArgs(OutputFormat.Html);
 
-      const originalCwd = process.cwd();
-      process.chdir(tempDir);
+      exportReport(summary, args);
 
-      try {
-        exportReport(summary, args);
+      const htmlFile = getReportPath("LocIO-report.html");
+      expect(fs.existsSync(htmlFile)).toBe(true);
 
-        const htmlFile = path.join(tempDir, "LocIO-report.html");
-        expect(fs.existsSync(htmlFile)).toBe(true);
-
-        const content = fs.readFileSync(htmlFile, "utf-8");
-        expect(content).toContain("<!DOCTYPE html>");
-        expect(content).toContain("LocIO Report");
-        expect(content).toContain("Total Files");
-      } finally {
-        process.chdir(originalCwd);
-      }
+      const content = fs.readFileSync(htmlFile, "utf-8");
+      expect(content).toContain("<!DOCTYPE html>");
+      expect(content).toContain("LocIO Report");
+      expect(content).toContain("Total Files");
     });
 
     it("should include dependency graph in HTML", () => {
       const summary = createTestSummary();
       const args = createTestArgs(OutputFormat.Html);
 
-      const originalCwd = process.cwd();
-      process.chdir(tempDir);
+      exportReport(summary, args);
 
-      try {
-        exportReport(summary, args);
+      const htmlFile = getReportPath("LocIO-report.html");
+      if (fs.existsSync(htmlFile)) {
+        const content = fs.readFileSync(htmlFile, "utf-8");
 
-        const htmlFile = path.join(tempDir, "LocIO-report.html");
-        if (fs.existsSync(htmlFile)) {
-          const content = fs.readFileSync(htmlFile, "utf-8");
-
-          expect(content).toContain("vis-network");
-          expect(content).toContain("dependencyGraph");
-          expect(content).toContain("Directory Structure Graph");
-        }
-      } finally {
-        process.chdir(originalCwd);
+        expect(content).toContain("vis-network");
+        expect(content).toContain("dependencyGraph");
+        expect(content).toContain("Directory Structure Graph");
       }
     });
   });
@@ -197,21 +175,14 @@ describe("Export Functionality - Simple Tests", () => {
       const args = createTestArgs(OutputFormat.Csv);
       args.show_stats = true;
 
-      const originalCwd = process.cwd();
-      process.chdir(tempDir);
+      exportReport(summary, args);
 
-      try {
-        exportReport(summary, args);
+      const csvFile = getReportPath("LocIO-report.csv");
+      expect(fs.existsSync(csvFile)).toBe(true);
 
-        const csvFile = path.join(tempDir, "LocIO-report.csv");
-        expect(fs.existsSync(csvFile)).toBe(true);
-
-        const content = fs.readFileSync(csvFile, "utf-8");
-        expect(content).toContain("Extension,Files,Lines,Size");
-        expect(content).toContain("ts,2,10,100");
-      } finally {
-        process.chdir(originalCwd);
-      }
+      const content = fs.readFileSync(csvFile, "utf-8");
+      expect(content).toContain("Extension,Files,Lines,Size");
+      expect(content).toContain("ts,2,10,100");
     });
   });
 
@@ -220,22 +191,15 @@ describe("Export Functionality - Simple Tests", () => {
       const summary = createTestSummary();
       const args = createTestArgs(OutputFormat.Markdown);
 
-      const originalCwd = process.cwd();
-      process.chdir(tempDir);
+      exportReport(summary, args);
 
-      try {
-        exportReport(summary, args);
+      const mdFile = getReportPath("LocIO-report.md");
+      expect(fs.existsSync(mdFile)).toBe(true);
 
-        const mdFile = path.join(tempDir, "LocIO-report.md");
-        expect(fs.existsSync(mdFile)).toBe(true);
-
-        const content = fs.readFileSync(mdFile, "utf-8");
-        expect(content).toContain("# LocIO Report");
-        expect(content).toContain("## Summary");
-        expect(content).toContain("| Total Files | 3 |");
-      } finally {
-        process.chdir(originalCwd);
-      }
+      const content = fs.readFileSync(mdFile, "utf-8");
+      expect(content).toContain("# LocIO Report");
+      expect(content).toContain("## Summary");
+      expect(content).toContain("| Total Files | 3 |");
     });
   });
 });
