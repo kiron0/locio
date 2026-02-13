@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { getPackageVersion } from "../utils/version.js";
+import { loadConfig, mergeConfigIntoArgs } from "./config.js";
 import {
   arrayAccumulator,
   parseCommaSeparated,
@@ -49,6 +50,9 @@ export interface Args {
   collect_details?: boolean;
   max_details?: number;
   watch_debounce?: number;
+  duplicates: boolean;
+  workspaces: boolean;
+  directories: string[];
 }
 
 function similarity(str1: string, str2: string): number {
@@ -140,6 +144,8 @@ export function createCommand(): Command {
     "rm-comments",
     "top-files",
     "top-dirs",
+    "duplicates",
+    "workspaces",
     "version",
   ];
 
@@ -185,7 +191,10 @@ export function createCommand(): Command {
     .name("LocIO")
     .description("A powerful CLI tool to count lines and files in directories")
     .version(getPackageVersion(), "-v, --version", "Show version number")
-    .argument("[directory]", "Directory to scan", ".")
+    .argument(
+      "[directories...]",
+      "Directories to scan (default: current directory)",
+    )
     .option("-f, --files-only", "Count only files")
     .option("-l, --lines-only", "Count only lines")
     .option(
@@ -260,6 +269,11 @@ export function createCommand(): Command {
       "--top-dirs <n>",
       "Show top N directories with most files",
       parseInt,
+    )
+    .option("--duplicates", "Detect duplicate files by content hash")
+    .option(
+      "--workspaces",
+      "Auto-detect and scan workspace packages (npm/yarn/pnpm)",
     );
 
   return program;
@@ -270,7 +284,7 @@ export function parseArgs(): Args {
   program.parse();
 
   const options = program.opts();
-  const args = program.args;
+  const positionalArgs = program.args;
 
   const excludeExt = options["excludeExt"]
     ? parseCommaSeparated(options["excludeExt"] as string)
@@ -279,8 +293,12 @@ export function parseArgs(): Args {
     ? parseCommaSeparated(options["includeExt"] as string)
     : [];
 
-  return {
-    directory: args[0] || ".",
+  const directories = positionalArgs.length > 0 ? positionalArgs : ["."];
+  const primaryDirectory = directories[0] || ".";
+
+  const cliArgs: Args = {
+    directory: primaryDirectory,
+    directories,
     files_only: (options["filesOnly"] as boolean) || false,
     lines_only: (options["linesOnly"] as boolean) || false,
     exclude_patterns: (options["exclude"] as string[]) || [],
@@ -316,5 +334,62 @@ export function parseArgs(): Args {
     })(),
     top_files: options["topFiles"] as number | undefined,
     top_dirs: options["topDirs"] as number | undefined,
+    duplicates: (options["duplicates"] as boolean) || false,
+    workspaces: (options["workspaces"] as boolean) || false,
   };
+
+  const explicitCliKeys = new Set<string>();
+  const optionMapping: Record<string, string> = {
+    filesOnly: "files_only",
+    linesOnly: "lines_only",
+    exclude: "exclude_patterns",
+    excludeExt: "exclude_extensions",
+    includeExt: "include_extensions",
+    excludeDir: "exclude_dirs",
+    includeDir: "include_dirs",
+    excludeName: "exclude_names",
+    includeName: "include_names",
+    maxSize: "max_size",
+    minSize: "min_size",
+    noHidden: "no_hidden",
+    noEmpty: "no_empty",
+    followLinks: "follow_links",
+    maxDepth: "max_depth",
+    stats: "show_stats",
+    noProgress: "show_progress",
+    noBinary: "no_binary",
+    ignoreCase: "ignore_case",
+    quiet: "quiet",
+    export: "export",
+    exportPath: "export_path",
+    watch: "watch",
+    watchDebounce: "watch_debounce",
+    noComments: "comments",
+    codeVsComments: "code_vs_comments",
+    rmComments: "rm_comments",
+    topFiles: "top_files",
+    topDirs: "top_dirs",
+    duplicates: "duplicates",
+    workspaces: "workspaces",
+  };
+
+  for (const opt of program.options) {
+    const key = opt.attributeName();
+    if (program.getOptionValueSource(key) === "cli") {
+      const mappedKey = optionMapping[key] || key;
+      explicitCliKeys.add(mappedKey);
+    }
+  }
+
+  if (positionalArgs.length > 0) {
+    explicitCliKeys.add("directory");
+    explicitCliKeys.add("directories");
+  }
+
+  const configArgs = loadConfig(primaryDirectory);
+  if (configArgs) {
+    return mergeConfigIntoArgs(cliArgs, configArgs, explicitCliKeys);
+  }
+
+  return cliArgs;
 }

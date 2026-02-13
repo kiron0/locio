@@ -3,7 +3,15 @@ import * as fs from "fs";
 import { detectProjectType, ProjectType } from "../core/detection/index.js";
 import { ErrorCode, isError, LineCounterError } from "../core/errors.js";
 import { exportReport, formatProjectType } from "../core/export/index.js";
-import { scanDirectory, scanFile } from "../core/scanner/index.js";
+import { groupByLanguage } from "../core/language/index.js";
+import {
+  findDuplicates,
+  mergeSummaries,
+  scanDirectory,
+  scanFile,
+} from "../core/scanner/index.js";
+import type { Summary } from "../core/types.js";
+import { detectWorkspaces } from "../core/workspace/workspace.js";
 import { createLogger } from "../utils/logger.js";
 import { UsageStatsTracker } from "../utils/metrics.js";
 import { getPackageVersion } from "../utils/version.js";
@@ -24,7 +32,93 @@ async function run(args: Args): Promise<void | LineCounterError> {
     return;
   }
 
-  const validation = validateDirectory(args.directory);
+  let targetDirs = args.directories || [args.directory];
+
+  if (args.workspaces) {
+    const rootDir = targetDirs[0] || ".";
+    const rootValidation = validateDirectory(rootDir);
+    if (rootValidation.error) return rootValidation.error;
+
+    const workspaceDirs = detectWorkspaces(rootValidation.path);
+    if (workspaceDirs.length > 0) {
+      logger.info(
+        `${chalk.cyan("Detected")} ${chalk.yellow(workspaceDirs.length)} ${chalk.cyan("workspace packages")}\n`,
+      );
+      targetDirs = workspaceDirs;
+    } else {
+      logger.warn("No workspace packages found, scanning root directory.\n");
+      targetDirs = [rootValidation.path];
+    }
+  }
+
+  if (targetDirs.length === 1) {
+    return runSingleDirectory(args, targetDirs[0]!, logger);
+  }
+
+  const summaryMap = new Map<string, Summary>();
+  const usageTracker = !args.quiet ? new UsageStatsTracker() : null;
+
+  for (const dir of targetDirs) {
+    const validation = validateDirectory(dir);
+    if (validation.error) {
+      logger.warn(`Skipping ${dir}: ${validation.error.message}\n`);
+      continue;
+    }
+
+    const targetPath = validation.path;
+    const dirStats = fs.statSync(targetPath);
+
+    if (dirStats.isDirectory()) {
+      const projectType = detectProjectType(targetPath);
+      if (projectType !== ProjectType.Unknown) {
+        logger.info(
+          `${chalk.cyan(targetPath)}: ${chalk.blue.bold(formatProjectType(projectType))}`,
+        );
+      }
+    }
+
+    const dirArgs = { ...args, directory: targetPath };
+    const result = dirStats.isFile()
+      ? await scanFile(dirArgs)
+      : await scanDirectory(dirArgs);
+
+    if (isError(result)) {
+      logger.warn(`Error scanning ${dir}: ${result.message}\n`);
+      continue;
+    }
+
+    result.by_language = groupByLanguage(result);
+
+    if (args.duplicates && result.details.length > 0) {
+      result.duplicate_groups = findDuplicates(result.details, targetPath);
+    }
+
+    summaryMap.set(targetPath, result);
+
+    if (usageTracker) {
+      usageTracker.trackScan(dirArgs, result);
+    }
+  }
+
+  if (summaryMap.size === 0) {
+    return LineCounterError.directoryNotFound(targetDirs.join(", "));
+  }
+
+  const { combined } = mergeSummaries(summaryMap);
+  combined.by_language = groupByLanguage(combined);
+
+  args.directory = targetDirs[0]!;
+  exportReport(combined, args);
+
+  return;
+}
+
+async function runSingleDirectory(
+  args: Args,
+  dir: string,
+  logger: ReturnType<typeof createLogger>,
+): Promise<void | LineCounterError> {
+  const validation = validateDirectory(dir);
   if (validation.error) {
     return validation.error;
   }
@@ -79,6 +173,14 @@ async function run(args: Args): Promise<void | LineCounterError> {
 
   if (isError(summary)) {
     return summary;
+  }
+
+  if (!isError(summary)) {
+    summary.by_language = groupByLanguage(summary);
+
+    if (args.duplicates && summary.details.length > 0) {
+      summary.duplicate_groups = findDuplicates(summary.details, targetPath);
+    }
   }
 
   if (usageTracker && !isError(summary)) {

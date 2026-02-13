@@ -6,6 +6,7 @@ import {
   displayDirectory,
   formatProjectType,
   getExtensions,
+  getLanguageBreakdown,
   getTopDirectories,
   getTopFiles,
   groupFilesByDirectory,
@@ -49,6 +50,29 @@ export function buildMarkdownOutput(summary: Summary, args: Args): string {
         ).toFixed(2);
         md += `| Code vs Comments Ratio | ${ratio}:1 |\n`;
       }
+    }
+  }
+
+  const langStats = getLanguageBreakdown(summary);
+  if (langStats.length > 0) {
+    md += `\n## Statistics by Language\n\n`;
+    md += `| Language | Files | Lines | Code | Comments | Blanks | Size |\n`;
+    md += `|----------|-------|-------|------|----------|--------|------|\n`;
+    for (const lang of langStats) {
+      md += `| ${lang.language} | ${lang.files} | ${lang.lines} | ${lang.code_lines} | ${lang.comment_lines} | ${lang.blank_lines} | ${formatSize(lang.size)} |\n`;
+    }
+  }
+
+  if (summary.duplicate_groups && summary.duplicate_groups.length > 0) {
+    md += `\n## Duplicate Files\n\n`;
+    md += `Found **${summary.duplicate_groups.length}** groups of duplicate files:\n\n`;
+    for (const group of summary.duplicate_groups) {
+      const wasted = group.lines * (group.files.length - 1);
+      md += `### ${group.files.length} copies (${group.lines} lines each, ${wasted} lines wasted)\n\n`;
+      for (const f of group.files) {
+        md += `- \`${f.fullPath}\`\n`;
+      }
+      md += `\n`;
     }
   }
 

@@ -1,3 +1,21 @@
+export interface LanguageStats {
+  language: string;
+  extensions: string[];
+  files: number;
+  lines: number;
+  code_lines: number;
+  comment_lines: number;
+  blank_lines: number;
+  size: number;
+}
+
+export interface DuplicateGroup {
+  hash: string;
+  size: number;
+  lines: number;
+  files: Array<{ directory: string; name: string; fullPath: string }>;
+}
+
 export interface FileDetail {
   directory: string;
   name: string;
@@ -29,6 +47,8 @@ export interface Summary {
   inline_comments_by_extension?: Record<string, number>;
   size_by_extension: Record<string, number>;
   details: FileDetail[];
+  by_language?: LanguageStats[];
+  duplicate_groups?: DuplicateGroup[];
 
   _commentsRemoved?: number;
 }

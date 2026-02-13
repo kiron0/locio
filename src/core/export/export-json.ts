@@ -1,11 +1,12 @@
 import type { Args } from "../../cli/args.js";
 import { formatSize } from "../../utils/formatting/index.js";
 import { detectProjectType, ProjectType } from "../detection/index.js";
-import type { Summary } from "../types.js";
+import type { LanguageStats, Summary } from "../types.js";
 import {
   displayDirectory,
   formatProjectType,
   getExtensions,
+  getLanguageBreakdown,
   getTopDirectories,
   getTopFiles,
   isSingleFile,
@@ -55,6 +56,7 @@ export function buildJsonOutput(summary: Summary, args: Args): string {
         code_vs_comments_ratio?: number;
       }
     >;
+    by_language?: LanguageStats[];
     top_files?: Array<{
       name: string;
       directory: string;
@@ -70,6 +72,7 @@ export function buildJsonOutput(summary: Summary, args: Args): string {
       total_size_formatted: string;
       total_lines: number;
     }>;
+    duplicate_groups?: Summary["duplicate_groups"];
   }
 
   const output: JsonOutput = {
@@ -158,6 +161,15 @@ export function buildJsonOutput(summary: Summary, args: Args): string {
     }
     output.stats = stats;
     output.by_extension = stats;
+  }
+
+  const langStats = getLanguageBreakdown(summary);
+  if (langStats.length > 0) {
+    output.by_language = langStats;
+  }
+
+  if (summary.duplicate_groups && summary.duplicate_groups.length > 0) {
+    output.duplicate_groups = summary.duplicate_groups;
   }
 
   if (args.top_files && args.top_files > 0) {

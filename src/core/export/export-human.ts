@@ -9,6 +9,7 @@ import {
   formatFileSizeAndLines,
   getCommentStats,
   getExtensions,
+  getLanguageBreakdown,
   getTerminalWidth,
   getTopDirectories,
   getTopFiles,
@@ -79,6 +80,22 @@ export function buildHumanReport(summary: Summary, args: Args): string {
             : "0.00";
         out += `Code vs Comments Ratio: ${ratio}:1 (${summary.total_comment_lines} comments per ${summary.total_code_lines} code lines)\n`;
       }
+    }
+  }
+
+  const langStats = getLanguageBreakdown(summary);
+  if (langStats.length > 0) {
+    out += "\nStatistics by Language:\n";
+    out += "-".repeat(60) + "\n";
+    for (const lang of langStats) {
+      out += `  ${lang.language}: ${lang.files} files, ${lang.lines} lines`;
+      if (!args.lines_only) {
+        out += `, ${formatSize(lang.size)}`;
+      }
+      if (lang.code_lines > 0 || lang.comment_lines > 0) {
+        out += ` (${lang.code_lines} code, ${lang.comment_lines} comments, ${lang.blank_lines} blank)`;
+      }
+      out += "\n";
     }
   }
 
@@ -200,6 +217,18 @@ export function buildHumanReport(summary: Summary, args: Args): string {
     }
   }
 
+  if (summary.duplicate_groups && summary.duplicate_groups.length > 0) {
+    out += `\nDuplicate Files (${summary.duplicate_groups.length} groups):\n`;
+    out += "-".repeat(60) + "\n";
+    for (const group of summary.duplicate_groups) {
+      const wasted = group.lines * (group.files.length - 1);
+      out += `  ${group.files.length} copies, ${group.lines} lines each, ${wasted} lines wasted:\n`;
+      for (const f of group.files) {
+        out += `    - ${f.fullPath}\n`;
+      }
+    }
+  }
+
   out += "\n";
 
   return out;
@@ -286,6 +315,27 @@ export function humanReport(summary: Summary, args: Args): void {
           `\n${chalk.green.bold("Code vs Comments Ratio:")} ${chalk.magenta(ratio)}:1 ${chalk.gray(`(${summary.total_comment_lines} comments per ${summary.total_code_lines} code lines)`)}`,
         );
       }
+    }
+  }
+
+  const langStats = getLanguageBreakdown(summary);
+  if (langStats.length > 0) {
+    const termWidth = getTerminalWidth();
+    const sepWidth = Math.min(60, termWidth - 2);
+    console.log(`\n${severityColors.info.bold("Statistics by Language:")}`);
+    console.log(severityColors.muted("-".repeat(sepWidth)));
+
+    for (const lang of langStats) {
+      let line = `  ${chalk.white.bold(lang.language)}: ${chalk.yellow(lang.files)} files, ${chalk.yellow(lang.lines)} lines`;
+      if (!args.lines_only) {
+        line += `, ${chalk.white(formatSize(lang.size))}`;
+      }
+      if (lang.code_lines > 0 || lang.comment_lines > 0) {
+        line += chalk.gray(
+          ` (${chalk.blue(lang.code_lines)} code, ${chalk.cyan(lang.comment_lines)} comments, ${chalk.gray(lang.blank_lines)} blank)`,
+        );
+      }
+      console.log(line);
     }
   }
 
@@ -416,6 +466,22 @@ export function humanReport(summary: Summary, args: Args): void {
       console.log(
         `  ${chalk.yellow(dir.fileCount.toString().padEnd(5))} files ${chalk.white(dir.directory)} ${chalk.gray(`(${sizeStr}${linesStr})`)}`,
       );
+    }
+  }
+
+  if (summary.duplicate_groups && summary.duplicate_groups.length > 0) {
+    console.log(
+      `\n${chalk.cyan.bold(`Duplicate Files (${summary.duplicate_groups.length} groups):`)}`,
+    );
+    console.log(chalk.gray("-".repeat(60)));
+    for (const group of summary.duplicate_groups) {
+      const wasted = group.lines * (group.files.length - 1);
+      console.log(
+        `  ${chalk.yellow(group.files.length)} copies, ${chalk.yellow(group.lines)} lines each, ${chalk.red(wasted)} lines wasted:`,
+      );
+      for (const f of group.files) {
+        console.log(`    ${chalk.gray("─")} ${chalk.white(f.fullPath)}`);
+      }
     }
   }
 

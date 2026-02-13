@@ -37,6 +37,9 @@ describe("Export Functionality - Simple Tests", () => {
     summary.files_by_extension = { ts: 2, js: 1 };
     summary.lines_by_extension = { ts: 10, js: 5 };
     summary.size_by_extension = { ts: 100, js: 50 };
+    summary.code_lines_by_extension = { ts: 8, js: 4 };
+    summary.comment_lines_by_extension = { ts: 2, js: 1 };
+    summary.blank_lines_by_extension = { ts: 1, js: 1 };
     summary.details = [
       {
         directory: tempDir,
@@ -66,6 +69,7 @@ describe("Export Functionality - Simple Tests", () => {
   function createTestArgs(exportFormat?: OutputFormat | OutputFormat[]) {
     return {
       directory: tempDir,
+      directories: [tempDir],
       files_only: false,
       lines_only: false,
       exclude_patterns: [],
@@ -75,21 +79,31 @@ describe("Export Functionality - Simple Tests", () => {
       include_dirs: [],
       exclude_names: [],
       include_names: [],
+      max_size: undefined,
+      min_size: undefined,
       no_hidden: false,
       no_empty: false,
       follow_links: false,
+      max_depth: undefined,
       show_stats: false,
       show_progress: false,
       no_binary: false,
       ignore_case: false,
       quiet: true,
+      export: exportFormat,
+      export_path: undefined as string | undefined,
       version: false,
       watch: false,
       comments: false,
       code_vs_comments: false,
       rm_comments: false,
-      export: exportFormat,
-      export_path: undefined as string | undefined,
+      top_files: undefined,
+      top_dirs: undefined,
+      collect_details: undefined,
+      max_details: undefined,
+      watch_debounce: undefined,
+      duplicates: false,
+      workspaces: false,
     };
   }
 
@@ -113,6 +127,15 @@ describe("Export Functionality - Simple Tests", () => {
       expect(data.files).toBe(3);
       expect(data.lines).toBe(15);
       expect(data.size).toBe(150);
+
+      expect(data.by_language).toBeDefined();
+      if (Array.isArray(data.by_language)) {
+        const langs = data.by_language.map(
+          (l: { language: string }) => l.language,
+        );
+        expect(langs).toContain("TypeScript");
+        expect(langs).toContain("JavaScript");
+      }
     });
 
     it("should include extension statistics when show_stats is true", () => {
@@ -150,6 +173,10 @@ describe("Export Functionality - Simple Tests", () => {
       expect(content).toContain("<!DOCTYPE html>");
       expect(content).toContain("LocIO Report");
       expect(content).toContain("Total Files");
+
+      expect(content).toContain("languageChart");
+      expect(content).toContain("treemapContainer");
+      expect(content).toContain("Interactive Treemap");
     });
 
     it("should include dependency graph in HTML", () => {

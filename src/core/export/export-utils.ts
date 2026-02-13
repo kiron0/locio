@@ -5,7 +5,8 @@ import * as process from "process";
 import type { Args } from "../../cli/args.js";
 import { formatSize } from "../../utils/formatting/index.js";
 import { ProjectType } from "../detection/index.js";
-import type { FileDetail, Summary } from "../types.js";
+import { groupByLanguage } from "../language/index.js";
+import type { FileDetail, LanguageStats, Summary } from "../types.js";
 
 export function getTerminalWidth(): number {
   return process.stdout.columns || 80;
@@ -207,4 +208,11 @@ export function getExtensions(summary: Summary): string[] {
   return summary.files_by_extension
     ? Object.keys(summary.files_by_extension).sort()
     : [];
+}
+
+export function getLanguageBreakdown(summary: Summary): LanguageStats[] {
+  if (summary.by_language && summary.by_language.length > 0) {
+    return summary.by_language;
+  }
+  return groupByLanguage(summary);
 }

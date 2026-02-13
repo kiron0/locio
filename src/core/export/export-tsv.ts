@@ -5,6 +5,7 @@ import {
   displayDirectory,
   formatProjectType,
   getExtensions,
+  getLanguageBreakdown,
 } from "./export-utils.js";
 
 export function buildTsvOutput(summary: Summary, args: Args): string {
@@ -45,5 +46,24 @@ export function buildTsvOutput(summary: Summary, args: Args): string {
       out += `${ext}\t${count}\t${lines}\t${size}\n`;
     }
   }
+  const langStats = getLanguageBreakdown(summary);
+  if (langStats.length > 0) {
+    out += "\n# Language Breakdown\n";
+    out +=
+      "Language\tFiles\tLines\tCode Lines\tComment Lines\tBlank Lines\tSize\n";
+    for (const lang of langStats) {
+      out += `${lang.language}\t${lang.files}\t${lang.lines}\t${lang.code_lines}\t${lang.comment_lines}\t${lang.blank_lines}\t${lang.size}\n`;
+    }
+  }
+
+  if (summary.duplicate_groups && summary.duplicate_groups.length > 0) {
+    out += "\n# Duplicate Files\n";
+    out += "Hash\tFiles Count\tLines\tSize\tFile Paths\n";
+    for (const group of summary.duplicate_groups) {
+      const paths = group.files.map((f) => f.fullPath).join(";");
+      out += `${group.hash}\t${group.files.length}\t${group.lines}\t${group.size}\t${paths}\n`;
+    }
+  }
+
   return out;
 }

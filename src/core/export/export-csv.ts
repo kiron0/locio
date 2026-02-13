@@ -5,6 +5,7 @@ import {
   displayDirectory,
   formatProjectType,
   getExtensions,
+  getLanguageBreakdown,
 } from "./export-utils.js";
 
 export function buildCsvOutput(summary: Summary, args: Args): string {
@@ -44,5 +45,23 @@ export function buildCsvOutput(summary: Summary, args: Args): string {
       out += `${ext},${count},${lines},${size}\n`;
     }
   }
+  const langStats = getLanguageBreakdown(summary);
+  if (langStats.length > 0) {
+    out += "\n# Language Breakdown\n";
+    out += "Language,Files,Lines,Code Lines,Comment Lines,Blank Lines,Size\n";
+    for (const lang of langStats) {
+      out += `${lang.language},${lang.files},${lang.lines},${lang.code_lines},${lang.comment_lines},${lang.blank_lines},${lang.size}\n`;
+    }
+  }
+
+  if (summary.duplicate_groups && summary.duplicate_groups.length > 0) {
+    out += "\n# Duplicate Files\n";
+    out += "Hash,Files Count,Lines,Size,File Paths\n";
+    for (const group of summary.duplicate_groups) {
+      const paths = group.files.map((f) => f.fullPath).join(";");
+      out += `${group.hash},${group.files.length},${group.lines},${group.size},"${paths}"\n`;
+    }
+  }
+
   return out;
 }

@@ -3,17 +3,20 @@ import type { Args } from "../../cli/args.js";
 import { OutputFormat } from "../../cli/args.js";
 import { formatSize } from "../../utils/formatting/index.js";
 import { detectProjectType, ProjectType } from "../detection/index.js";
+import { getLanguageName } from "../language/index.js";
 import type { Summary } from "../types.js";
 import {
   displayDirectory,
   formatProjectType,
   getExtensions,
+  getLanguageBreakdown,
   getTopDirectories,
   getTopFiles,
 } from "./export-utils.js";
 
 export function buildHtmlOutput(summary: Summary, args: Args): string {
   const projectType = detectProjectType(args.directory);
+  const langStats = getLanguageBreakdown(summary);
   const extensions = getExtensions(summary);
   const extensionData = extensions.map((ext) => ({
     ext,
@@ -33,6 +36,7 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
   <title>LocIO Report - ${displayDirectory(args)}</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
   <style>
     * {
       margin: 0;
@@ -172,6 +176,90 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
     .legend-dir { background: #667eea; }
     .legend-file { background: #4ec9b0; }
     .legend-edge { background: #848484; }
+    #treemapContainer {
+      width: 100%;
+      height: 500px;
+      position: relative;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      overflow: hidden;
+      margin-top: 20px;
+    }
+    .treemap-controls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 15px;
+      flex-wrap: wrap;
+    }
+    .treemap-controls button {
+      padding: 8px 16px;
+      border: 2px solid #667eea;
+      background: white;
+      color: #667eea;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    .treemap-controls button.active,
+    .treemap-controls button:hover {
+      background: #667eea;
+      color: white;
+    }
+    .treemap-breadcrumb {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+      margin-bottom: 10px;
+      font-size: 0.9em;
+      color: #4a5568;
+    }
+    .treemap-breadcrumb span {
+      cursor: pointer;
+      color: #667eea;
+      text-decoration: underline;
+    }
+    .treemap-breadcrumb span:last-child {
+      color: #2d3748;
+      text-decoration: none;
+      font-weight: bold;
+      cursor: default;
+    }
+    .treemap-tooltip {
+      position: absolute;
+      background: rgba(45, 55, 72, 0.95);
+      color: white;
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 0.85em;
+      pointer-events: none;
+      z-index: 100;
+      max-width: 300px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    .treemap-lang-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 15px;
+      padding: 10px;
+      background: #f7fafc;
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
+    }
+    .treemap-lang-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.85em;
+    }
+    .treemap-lang-swatch {
+      width: 14px;
+      height: 14px;
+      border-radius: 3px;
+      border: 1px solid rgba(0,0,0,0.2);
+    }
   </style>
 </head>
 <body>
@@ -221,6 +309,68 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
             : ""
         }
       </div>
+
+      ${
+        langStats.length > 0
+          ? `<div class="section">
+        <h2>🌐 Statistics by Language</h2>
+        <div class="chart-container">
+          <canvas id="languageChart"></canvas>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Language</th>
+              <th>Files</th>
+              <th>Lines</th>
+              <th>Code</th>
+              <th>Comments</th>
+              <th>Blanks</th>
+              <th>Size</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${langStats
+              .map(
+                (l) => `<tr>
+              <td><strong>${l.language}</strong></td>
+              <td>${l.files}</td>
+              <td>${l.lines}</td>
+              <td>${l.code_lines}</td>
+              <td>${l.comment_lines}</td>
+              <td>${l.blank_lines}</td>
+              <td>${formatSize(l.size)}</td>
+            </tr>`,
+              )
+              .join("")}
+          </tbody>
+        </table>
+      </div>`
+          : ""
+      }
+
+      ${
+        summary.duplicate_groups && summary.duplicate_groups.length > 0
+          ? `<div class="section">
+        <h2>📋 Duplicate Files</h2>
+        <p>Found <strong>${summary.duplicate_groups.length}</strong> groups of duplicate files</p>
+        ${summary.duplicate_groups
+          .map(
+            (
+              group,
+            ) => `<div style="background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin: 10px 0;">
+          <div style="font-weight: bold; color: #667eea; margin-bottom: 8px;">
+            ${group.files.length} copies &middot; ${group.lines} lines each &middot; ${group.lines * (group.files.length - 1)} lines wasted &middot; ${formatSize(group.size)}
+          </div>
+          <ul style="margin: 0; padding-left: 20px;">
+            ${group.files.map((f) => `<li><code>${f.fullPath}</code></li>`).join("")}
+          </ul>
+        </div>`,
+          )
+          .join("")}
+      </div>`
+          : ""
+      }
 
       ${
         extensions.length > 0
@@ -659,6 +809,23 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
             })()
           : ""
       }
+      ${
+        summary.details && summary.details.length > 0
+          ? `<div class="section">
+        <h2>🗂️ Interactive Treemap</h2>
+        <div class="treemap-controls">
+          <button class="active" data-metric="lines">Lines</button>
+          <button data-metric="size">Size</button>
+          <button data-metric="files">Files</button>
+        </div>
+        <div class="treemap-breadcrumb" id="treemapBreadcrumb">
+          <span>root</span>
+        </div>
+        <div id="treemapContainer"></div>
+        <div class="treemap-lang-legend" id="treemapLegend"></div>
+      </div>`
+          : ""
+      }
     </div>
     <div class="footer">
       Generated by <a href="https://locio.js.org">LocIO</a>
@@ -666,6 +833,42 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
   </div>
 
   <script>
+    ${
+      langStats.length > 0
+        ? `const langCtx = document.getElementById('languageChart');
+    new Chart(langCtx, {
+      type: 'bar',
+      data: {
+        labels: ${JSON.stringify(langStats.map((l) => l.language))},
+        datasets: [
+          {
+            label: 'Lines',
+            data: ${JSON.stringify(langStats.map((l) => l.lines))},
+            backgroundColor: 'rgba(102, 126, 234, 0.8)',
+            borderColor: 'rgba(102, 126, 234, 1)',
+            borderWidth: 2
+          },
+          {
+            label: 'Files',
+            data: ${JSON.stringify(langStats.map((l) => l.files))},
+            backgroundColor: 'rgba(118, 75, 162, 0.8)',
+            borderColor: 'rgba(118, 75, 162, 1)',
+            borderWidth: 2
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'top' },
+          title: { display: true, text: 'Files and Lines by Language' }
+        }
+      }
+    });`
+        : ""
+    }
+
     ${
       extensions.length > 0
         ? `const extensionCtx = document.getElementById('extensionChart');
@@ -747,6 +950,235 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
         }
       }
     });`
+        : ""
+    }
+
+    ${
+      summary.details && summary.details.length > 0
+        ? (() => {
+            const treemapFileData = summary.details.map((d) => ({
+              path: (d.directory + "/" + d.name)
+                .replace(/\\\\/g, "/")
+                .replace(/\\/g, "/"),
+              lines: d.lines || 0,
+              size: d.size,
+              ext: d.extension,
+            }));
+            return `
+    // --- TREEMAP VISUALIZATION ---
+    (function() {
+      const fileData = ${JSON.stringify(treemapFileData)};
+
+      // Extension to language map (subset)
+      const extToLang = ${JSON.stringify(
+        (() => {
+          const usedExts = new Set(
+            summary.details.map((d: { extension: string }) =>
+              d.extension.replace(/^\./, "").toLowerCase(),
+            ),
+          );
+          const subset: Record<string, string> = {};
+          for (const ext of usedExts) {
+            subset[ext] = getLanguageName(ext);
+          }
+          return subset;
+        })(),
+      )};
+
+      function getLang(ext) {
+        const e = ext.replace(/^\\./, '').toLowerCase();
+        return extToLang[e] || e.charAt(0).toUpperCase() + e.slice(1);
+      }
+
+      // Color scale by language
+      const allLangs = [...new Set(fileData.map(f => getLang(f.ext)))].sort();
+      const colorScale = d3.scaleOrdinal(d3.schemeTableau10).domain(allLangs);
+
+      // Build legend
+      const legendEl = document.getElementById('treemapLegend');
+      if (legendEl) {
+        legendEl.innerHTML = allLangs.map(lang =>
+          '<div class="treemap-lang-item"><div class="treemap-lang-swatch" style="background:' + colorScale(lang) + '"></div>' + lang + '</div>'
+        ).join('');
+      }
+
+      // Build hierarchy from flat file list
+      function buildHierarchy(files, metric) {
+        const root = { name: 'root', children: [] };
+        for (const file of files) {
+          const parts = file.path.split('/').filter(p => p);
+          let current = root;
+          for (let i = 0; i < parts.length; i++) {
+            const part = parts[i];
+            const isFile = i === parts.length - 1;
+            if (isFile) {
+              const val = metric === 'lines' ? file.lines : metric === 'size' ? file.size : 1;
+              current.children.push({
+                name: part,
+                value: Math.max(val, 1),
+                language: getLang(file.ext),
+                ext: file.ext,
+                lines: file.lines,
+                size: file.size,
+              });
+            } else {
+              let child = current.children.find(c => c.name === part && c.children);
+              if (!child) {
+                child = { name: part, children: [] };
+                current.children.push(child);
+              }
+              current = child;
+            }
+          }
+        }
+        return root;
+      }
+
+      let currentMetric = 'lines';
+      let currentRoot = null;
+
+      const container = document.getElementById('treemapContainer');
+      if (!container) return;
+      const width = container.clientWidth || 900;
+      const height = 500;
+
+      const svg = d3.select('#treemapContainer')
+        .append('svg')
+        .attr('width', width)
+        .attr('height', height)
+        .style('font-family', '-apple-system, BlinkMacSystemFont, sans-serif');
+
+      // Tooltip
+      const tooltip = d3.select('#treemapContainer')
+        .append('div')
+        .attr('class', 'treemap-tooltip')
+        .style('display', 'none');
+
+      function formatBytes(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+      }
+
+      function renderTreemap(node) {
+        currentRoot = node;
+        const hierarchy = d3.hierarchy(node)
+          .sum(d => d.value || 0)
+          .sort((a, b) => (b.value || 0) - (a.value || 0));
+
+        d3.treemap()
+          .size([width, height])
+          .padding(2)
+          .round(true)(hierarchy);
+
+        svg.selectAll('*').remove();
+
+        const leaves = hierarchy.leaves();
+
+        const cell = svg.selectAll('g')
+          .data(leaves)
+          .join('g')
+          .attr('transform', d => 'translate(' + d.x0 + ',' + d.y0 + ')');
+
+        cell.append('rect')
+          .attr('width', d => Math.max(d.x1 - d.x0, 0))
+          .attr('height', d => Math.max(d.y1 - d.y0, 0))
+          .attr('fill', d => colorScale(d.data.language || 'Unknown'))
+          .attr('opacity', 0.85)
+          .attr('rx', 2)
+          .style('cursor', d => d.data.children ? 'pointer' : 'default')
+          .on('mouseover', function(event, d) {
+            d3.select(this).attr('opacity', 1).attr('stroke', '#2d3748').attr('stroke-width', 2);
+            let html = '<strong>' + d.data.name + '</strong>';
+            if (d.data.language) html += '<br>Language: ' + d.data.language;
+            if (d.data.lines !== undefined) html += '<br>Lines: ' + d.data.lines.toLocaleString();
+            if (d.data.size !== undefined) html += '<br>Size: ' + formatBytes(d.data.size);
+            tooltip.html(html).style('display', 'block');
+          })
+          .on('mousemove', function(event) {
+            const rect = container.getBoundingClientRect();
+            tooltip
+              .style('left', (event.clientX - rect.left + 12) + 'px')
+              .style('top', (event.clientY - rect.top - 10) + 'px');
+          })
+          .on('mouseout', function() {
+            d3.select(this).attr('opacity', 0.85).attr('stroke', 'none');
+            tooltip.style('display', 'none');
+          })
+          .on('click', function(event, d) {
+            // Navigate up: find parent directory node
+            const ancestors = d.ancestors().reverse();
+            if (ancestors.length > 2) {
+              const parentNode = ancestors[ancestors.length - 2];
+              if (parentNode && parentNode.data.children) {
+                renderTreemap(parentNode.data);
+                updateBreadcrumb(parentNode);
+              }
+            }
+          });
+
+        // Labels for cells large enough
+        cell.append('text')
+          .attr('x', 4)
+          .attr('y', 14)
+          .text(d => {
+            const w = d.x1 - d.x0;
+            const h = d.y1 - d.y0;
+            if (w < 40 || h < 18) return '';
+            const maxChars = Math.floor(w / 7);
+            const name = d.data.name;
+            return name.length > maxChars ? name.substring(0, maxChars - 1) + '…' : name;
+          })
+          .attr('font-size', '11px')
+          .attr('fill', 'white')
+          .attr('text-shadow', '0 1px 2px rgba(0,0,0,0.5)')
+          .style('pointer-events', 'none');
+      }
+
+      function updateBreadcrumb(node) {
+        const breadcrumb = document.getElementById('treemapBreadcrumb');
+        if (!breadcrumb) return;
+        const ancestors = [];
+        let current = node;
+        while (current) {
+          ancestors.unshift(current);
+          current = current.parent;
+        }
+        breadcrumb.innerHTML = ancestors.map((a, i) => {
+          if (i === ancestors.length - 1) {
+            return '<span>' + (a.data.name || 'root') + '</span>';
+          }
+          return '<span onclick="window.__treemapNav(' + i + ')">' + (a.data.name || 'root') + '</span> / ';
+        }).join('');
+      }
+
+      // Navigation helper
+      window.__treemapNav = function(index) {
+        // Rebuild from root and navigate
+        const data = buildHierarchy(fileData, currentMetric);
+        renderTreemap(data);
+        const breadcrumb = document.getElementById('treemapBreadcrumb');
+        if (breadcrumb) breadcrumb.innerHTML = '<span>root</span>';
+      };
+
+      // Metric toggle buttons
+      document.querySelectorAll('.treemap-controls button').forEach(btn => {
+        btn.addEventListener('click', function() {
+          document.querySelectorAll('.treemap-controls button').forEach(b => b.classList.remove('active'));
+          this.classList.add('active');
+          currentMetric = this.dataset.metric;
+          const data = buildHierarchy(fileData, currentMetric);
+          renderTreemap(data);
+          const breadcrumb = document.getElementById('treemapBreadcrumb');
+          if (breadcrumb) breadcrumb.innerHTML = '<span>root</span>';
+        });
+      });
+
+      // Initial render
+      const initialData = buildHierarchy(fileData, currentMetric);
+      renderTreemap(initialData);
+    })();`;
+          })()
         : ""
     }
   </script>

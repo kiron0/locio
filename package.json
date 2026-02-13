@@ -1,6 +1,6 @@
 {
   "name": "locio",
-  "version": "1.0.2",
+  "version": "1.0.5",
   "description": "A powerful CLI tool to count lines and files in directories with extensive filtering options",
   "type": "module",
   "bin": {
