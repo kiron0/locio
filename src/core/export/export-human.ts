@@ -19,11 +19,23 @@ import {
   shouldShowComments,
 } from "./export-utils.js";
 
+function formatQuietOutput(summary: Summary, args: Args): string {
+  if (args.files_only && !args.lines_only) {
+    return `${summary.total_files}\n`;
+  }
+
+  if (args.lines_only && !args.files_only) {
+    return `${summary.total_lines}\n`;
+  }
+
+  return `${summary.total_files} ${summary.total_lines}\n`;
+}
+
 export function buildHumanReport(summary: Summary, args: Args): string {
   let out = "";
 
   if (args.quiet) {
-    out += `${summary.total_files} ${summary.total_lines}\n`;
+    out += formatQuietOutput(summary, args);
     return out;
   }
 
@@ -88,11 +100,14 @@ export function buildHumanReport(summary: Summary, args: Args): string {
     out += "\nStatistics by Language:\n";
     out += "-".repeat(60) + "\n";
     for (const lang of langStats) {
-      out += `  ${lang.language}: ${lang.files} files, ${lang.lines} lines`;
+      out += `  ${lang.language}: ${lang.files} files`;
+      if (!args.files_only) {
+        out += `, ${lang.lines} lines`;
+      }
       if (!args.lines_only) {
         out += `, ${formatSize(lang.size)}`;
       }
-      if (lang.code_lines > 0 || lang.comment_lines > 0) {
+      if (!args.files_only && (lang.code_lines > 0 || lang.comment_lines > 0)) {
         out += ` (${lang.code_lines} code, ${lang.comment_lines} comments, ${lang.blank_lines} blank)`;
       }
       out += "\n";
@@ -236,7 +251,7 @@ export function buildHumanReport(summary: Summary, args: Args): string {
 
 export function humanReport(summary: Summary, args: Args): void {
   if (args.quiet) {
-    console.log(`${summary.total_files} ${summary.total_lines}`);
+    process.stdout.write(formatQuietOutput(summary, args));
     return;
   }
 
@@ -326,11 +341,14 @@ export function humanReport(summary: Summary, args: Args): void {
     console.log(severityColors.muted("-".repeat(sepWidth)));
 
     for (const lang of langStats) {
-      let line = `  ${chalk.white.bold(lang.language)}: ${chalk.yellow(lang.files)} files, ${chalk.yellow(lang.lines)} lines`;
+      let line = `  ${chalk.white.bold(lang.language)}: ${chalk.yellow(lang.files)} files`;
+      if (!args.files_only) {
+        line += `, ${chalk.yellow(lang.lines)} lines`;
+      }
       if (!args.lines_only) {
         line += `, ${chalk.white(formatSize(lang.size))}`;
       }
-      if (lang.code_lines > 0 || lang.comment_lines > 0) {
+      if (!args.files_only && (lang.code_lines > 0 || lang.comment_lines > 0)) {
         line += chalk.gray(
           ` (${chalk.blue(lang.code_lines)} code, ${chalk.cyan(lang.comment_lines)} comments, ${chalk.gray(lang.blank_lines)} blank)`,
         );

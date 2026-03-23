@@ -1,5 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
+import { InvalidArgumentError } from "commander";
 import { LineCounterError } from "../core/errors.js";
 import { OutputFormat } from "./args.js";
 
@@ -40,6 +41,43 @@ export function parseOutputFormat(
       ? formats[0]
       : formats
     : undefined;
+}
+
+export function parseOutputFormatStrict(
+  value: true | string | undefined,
+): OutputFormat | OutputFormat[] | undefined {
+  if (value === undefined) return undefined;
+  if (value === true) return OutputFormat.Human;
+
+  const parsed = parseOutputFormat(value);
+  const requestedFormats = parseCommaSeparated(value);
+
+  if (!parsed || requestedFormats.length === 0) {
+    throw new InvalidArgumentError(
+      "Invalid export format. Valid formats: human, json, csv, tsv, markdown, html",
+    );
+  }
+
+  const parsedFormats = new Set(Array.isArray(parsed) ? parsed : [parsed]);
+  if (parsedFormats.size !== requestedFormats.length) {
+    throw new InvalidArgumentError(
+      "Invalid export format. Valid formats: human, json, csv, tsv, markdown, html",
+    );
+  }
+
+  return parsed;
+}
+
+export function parseNonNegativeIntegerStrict(value: string): number {
+  const trimmed = value.trim();
+
+  if (!/^\d+$/.test(trimmed)) {
+    throw new InvalidArgumentError(
+      `Invalid numeric value: "${value}". Expected a non-negative integer.`,
+    );
+  }
+
+  return Number.parseInt(trimmed, 10);
 }
 
 export function validateDirectory(

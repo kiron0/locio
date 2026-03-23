@@ -1,30 +1,12 @@
 import { afterEach, beforeEach, describe, it } from "vitest";
 import type { Args } from "../../src/cli/args.js";
 import { scanDirectory } from "../../src/core/scanner/index.js";
+import { benchmark } from "./benchmark-utils.js";
 import {
   createTempDir,
   createTestDirStructure,
   removeTempDir,
 } from "../utils/test-helpers.js";
-
-async function benchmark(
-  name: string,
-  fn: () => void | Promise<void>,
-): Promise<void> {
-  const start = performance.now();
-  const result = fn();
-
-  if (result instanceof Promise) {
-    await result;
-    const end = performance.now();
-    const duration = end - start;
-    console.log(`  ${name}: ${duration.toFixed(2)}ms`);
-  } else {
-    const end = performance.now();
-    const duration = end - start;
-    console.log(`  ${name}: ${duration.toFixed(2)}ms`);
-  }
-}
 
 describe("Scanner Performance Benchmarks", () => {
   let tempDir: string;
@@ -55,6 +37,7 @@ describe("Scanner Performance Benchmarks", () => {
     it("benchmark: scan small codebase", async () => {
       const args: Args = {
         directory: tempDir,
+        directories: [tempDir],
         files_only: false,
         lines_only: false,
         exclude_patterns: [],
@@ -77,6 +60,8 @@ describe("Scanner Performance Benchmarks", () => {
         comments: false,
         code_vs_comments: false,
         rm_comments: false,
+        duplicates: false,
+        workspaces: false,
       };
 
       await benchmark("Scan small codebase (< 100 files)", async () => {
@@ -103,6 +88,7 @@ describe("Scanner Performance Benchmarks", () => {
     it("benchmark: scan medium codebase", async () => {
       const args: Args = {
         directory: tempDir,
+        directories: [tempDir],
         files_only: false,
         lines_only: false,
         exclude_patterns: [],
@@ -125,6 +111,8 @@ describe("Scanner Performance Benchmarks", () => {
         comments: false,
         code_vs_comments: false,
         rm_comments: false,
+        duplicates: false,
+        workspaces: false,
       };
 
       await benchmark("Scan medium codebase (100-1000 files)", async () => {
@@ -135,6 +123,7 @@ describe("Scanner Performance Benchmarks", () => {
     it("benchmark: scan with extension filter", async () => {
       const args: Args = {
         directory: tempDir,
+        directories: [tempDir],
         files_only: false,
         lines_only: false,
         exclude_patterns: [],
@@ -157,6 +146,8 @@ describe("Scanner Performance Benchmarks", () => {
         comments: false,
         code_vs_comments: false,
         rm_comments: false,
+        duplicates: false,
+        workspaces: false,
       };
 
       await benchmark("Scan with extension filter", async () => {
@@ -167,6 +158,7 @@ describe("Scanner Performance Benchmarks", () => {
     it("benchmark: scan with exclude patterns", async () => {
       const args: Args = {
         directory: tempDir,
+        directories: [tempDir],
         files_only: false,
         lines_only: false,
         exclude_patterns: ["dir0", "dir1"],
@@ -189,6 +181,8 @@ describe("Scanner Performance Benchmarks", () => {
         comments: false,
         code_vs_comments: false,
         rm_comments: false,
+        duplicates: false,
+        workspaces: false,
       };
 
       await benchmark("Scan with exclude patterns", async () => {
@@ -207,6 +201,7 @@ describe("Scanner Performance Benchmarks", () => {
 
       const args: Args = {
         directory: tempDir,
+        directories: [tempDir],
         files_only: false,
         lines_only: false,
         exclude_patterns: [],
@@ -229,6 +224,8 @@ describe("Scanner Performance Benchmarks", () => {
         comments: false,
         code_vs_comments: false,
         rm_comments: false,
+        duplicates: false,
+        workspaces: false,
       };
 
       await benchmark("Baseline: 10 files", async () => {
@@ -245,6 +242,7 @@ describe("Scanner Performance Benchmarks", () => {
 
       const args: Args = {
         directory: tempDir,
+        directories: [tempDir],
         files_only: false,
         lines_only: false,
         exclude_patterns: [],
@@ -267,6 +265,8 @@ describe("Scanner Performance Benchmarks", () => {
         comments: false,
         code_vs_comments: false,
         rm_comments: false,
+        duplicates: false,
+        workspaces: false,
       };
 
       await benchmark("Optimization comparison: 100 files", async () => {

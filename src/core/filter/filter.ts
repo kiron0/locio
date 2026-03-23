@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import type { Args } from "../../cli/args.js";
+import { parseCommaSeparated } from "../../cli/utils.js";
 import { isBinaryFile, parseSize } from "../../utils/files.js";
 import {
   detectProjectType,
@@ -8,11 +9,18 @@ import {
   type ProjectType,
 } from "../detection/index.js";
 import { LineCounterError } from "../errors.js";
-import { DEFAULT_IGNORED_EXTENSIONS } from "./ignored.js";
+import {
+  DEFAULT_IGNORED_EXTENSIONS,
+  DEFAULT_RM_COMMENTS_IGNORED_EXTENSIONS,
+} from "./ignored.js";
 
 function loadDefaultIgnoredExtensions(): string[] {
   return DEFAULT_IGNORED_EXTENSIONS.map((ext) => ext.toLowerCase());
 }
+
+const DEFAULT_COMMENT_IGNORED_EXTENSIONS = new Set(
+  DEFAULT_RM_COMMENTS_IGNORED_EXTENSIONS.map((ext) => ext.toLowerCase()),
+);
 
 export interface FilterPatterns {
   exclude_patterns: RegExp[];
@@ -30,24 +38,33 @@ export interface FilterPatterns {
   combined_exclude_patterns?: RegExp | null;
   combined_exclude_dirs?: RegExp | null;
   combined_exclude_names?: RegExp | null;
+  max_size_bytes?: number;
+  min_size_bytes?: number;
+  ignored_comment_extensions_set: Set<string>;
+  rm_comment_extensions_set?: Set<string>;
+  rm_comments_all_files: boolean;
 }
 
 export function createFilterPatterns(
   args: Args,
 ): FilterPatterns | LineCounterError {
   try {
+    let maxSizeBytes: number | undefined;
     if (args.max_size) {
       const maxSize = parseSize(args.max_size);
       if (maxSize instanceof LineCounterError) {
         return maxSize;
       }
+      maxSizeBytes = maxSize;
     }
 
+    let minSizeBytes: number | undefined;
     if (args.min_size) {
       const minSize = parseSize(args.min_size);
       if (minSize instanceof LineCounterError) {
         return minSize;
       }
+      minSizeBytes = minSize;
     }
 
     const detectedProjectType = detectProjectType(args.directory);
@@ -125,6 +142,16 @@ export function createFilterPatterns(
           )
         : null;
 
+    const rmCommentsAllFiles = args.rm_comments === true;
+    const rmCommentExtensionsSet =
+      typeof args.rm_comments === "string"
+        ? new Set(
+            parseCommaSeparated(args.rm_comments).map((ext) =>
+              ext.toLowerCase().replace(/^\./, ""),
+            ),
+          )
+        : undefined;
+
     return {
       exclude_patterns,
       exclude_extensions: uniqueExcludeExt,
@@ -140,6 +167,11 @@ export function createFilterPatterns(
       combined_exclude_patterns: combinedExcludePatterns,
       combined_exclude_dirs: combinedExcludeDirs,
       combined_exclude_names: combinedExcludeNames,
+      max_size_bytes: maxSizeBytes,
+      min_size_bytes: minSizeBytes,
+      ignored_comment_extensions_set: DEFAULT_COMMENT_IGNORED_EXTENSIONS,
+      rm_comment_extensions_set: rmCommentExtensionsSet,
+      rm_comments_all_files: rmCommentsAllFiles,
     };
   } catch (e) {
     if (e instanceof LineCounterError) {
@@ -155,6 +187,7 @@ export function shouldExcludeFile(
   filePath: string,
   args: Args,
   patterns: FilterPatterns,
+  stats?: fs.Stats,
 ): boolean {
   const pathStr = filePath;
   const fileName = path.basename(filePath);
@@ -268,28 +301,26 @@ export function shouldExcludeFile(
     return true;
   }
 
-  try {
-    const stats = fs.statSync(filePath);
-    const size = stats.size;
-
-    if (args.max_size) {
-      const maxSize = parseSize(args.max_size);
-      if (!(maxSize instanceof LineCounterError) && size > maxSize) {
-        return true;
-      }
+  const size = stats?.size;
+  if (size !== undefined) {
+    if (
+      patterns.max_size_bytes !== undefined &&
+      size > patterns.max_size_bytes
+    ) {
+      return true;
     }
 
-    if (args.min_size) {
-      const minSize = parseSize(args.min_size);
-      if (!(minSize instanceof LineCounterError) && size < minSize) {
-        return true;
-      }
+    if (
+      patterns.min_size_bytes !== undefined &&
+      size < patterns.min_size_bytes
+    ) {
+      return true;
     }
 
     if (args.no_empty && size === 0) {
       return true;
     }
-  } catch {}
+  }
 
   if (args.no_binary && isBinaryFile(filePath)) {
     return true;

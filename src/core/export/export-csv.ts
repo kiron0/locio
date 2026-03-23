@@ -6,15 +6,26 @@ import {
   formatProjectType,
   getExtensions,
   getLanguageBreakdown,
+  isMultiTargetScan,
 } from "./export-utils.js";
 
 export function buildCsvOutput(summary: Summary, args: Args): string {
-  const projectType = detectProjectType(args.directory);
+  const projectType = !isMultiTargetScan(args)
+    ? detectProjectType(args.directory)
+    : ProjectType.Unknown;
   let out = `# Directory,${displayDirectory(args)}\n`;
   if (projectType !== ProjectType.Unknown) {
     out += `# Project Type,${formatProjectType(projectType)}\n`;
   }
-  if (args.comments) {
+  if (args.files_only) {
+    out += "Extension,Files,Size\n";
+    const extensions = getExtensions(summary);
+    for (const ext of extensions) {
+      const count = summary.files_by_extension[ext];
+      const size = summary.size_by_extension[ext] || 0;
+      out += `${ext},${count},${size}\n`;
+    }
+  } else if (args.comments) {
     out += "Extension,Files,Lines,Code Lines,Comment Lines,Blank Lines,Size";
     if (args.code_vs_comments) {
       out += ",Code vs Comments Ratio";
@@ -48,9 +59,16 @@ export function buildCsvOutput(summary: Summary, args: Args): string {
   const langStats = getLanguageBreakdown(summary);
   if (langStats.length > 0) {
     out += "\n# Language Breakdown\n";
-    out += "Language,Files,Lines,Code Lines,Comment Lines,Blank Lines,Size\n";
-    for (const lang of langStats) {
-      out += `${lang.language},${lang.files},${lang.lines},${lang.code_lines},${lang.comment_lines},${lang.blank_lines},${lang.size}\n`;
+    if (args.files_only) {
+      out += "Language,Files,Size\n";
+      for (const lang of langStats) {
+        out += `${lang.language},${lang.files},${lang.size}\n`;
+      }
+    } else {
+      out += "Language,Files,Lines,Code Lines,Comment Lines,Blank Lines,Size\n";
+      for (const lang of langStats) {
+        out += `${lang.language},${lang.files},${lang.lines},${lang.code_lines},${lang.comment_lines},${lang.blank_lines},${lang.size}\n`;
+      }
     }
   }
 

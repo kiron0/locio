@@ -3,15 +3,19 @@ import * as path from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { OutputFormat } from "../../../src/cli/args.js";
 import { exportReport } from "../../../src/core/export/export.js";
+import { buildHumanReport } from "../../../src/core/export/export-human.js";
+import { buildJsonOutput } from "../../../src/core/export/export-json.js";
 import type { Summary } from "../../../src/core/types.js";
 import { createSummary } from "../../../src/core/types.js";
 import { createTempDir, removeTempDir } from "../../utils/test-helpers.js";
 
 describe("Export Functionality - Simple Tests", () => {
   let tempDir: string;
+  let externalDir: string;
 
   beforeEach(() => {
     tempDir = createTempDir();
+    externalDir = createTempDir();
   });
 
   afterEach(() => {
@@ -27,6 +31,7 @@ describe("Export Functionality - Simple Tests", () => {
       }
     } catch {}
     removeTempDir(tempDir);
+    removeTempDir(externalDir);
   });
 
   function createTestSummary(): Summary {
@@ -157,6 +162,63 @@ describe("Export Functionality - Simple Tests", () => {
         }
       }
     });
+
+    it("should write reports beside a scanned file instead of under the file path", () => {
+      const summary = createTestSummary();
+      const singleFile = path.join(tempDir, "single.ts");
+      fs.writeFileSync(singleFile, "const x = 1;\n", "utf-8");
+
+      const args = createTestArgs(OutputFormat.Json);
+      args.directory = singleFile;
+      args.directories = [singleFile];
+
+      exportReport(summary, args);
+
+      const jsonFile = path.join(tempDir, "reports", "LocIO-report.json");
+      expect(fs.existsSync(jsonFile)).toBe(true);
+    });
+
+    it("should allow exporting to a custom absolute directory outside the scan root", () => {
+      const summary = createTestSummary();
+      const args = createTestArgs(OutputFormat.Json);
+      args.export_path = path.join(externalDir, "reports");
+
+      exportReport(summary, args);
+
+      const jsonFile = path.join(externalDir, "reports", "LocIO-report.json");
+      expect(fs.existsSync(jsonFile)).toBe(true);
+    });
+
+    it("should label multi-directory reports with all scanned directories", () => {
+      const summary = createTestSummary();
+      const firstDir = path.join(tempDir, "one");
+      const secondDir = path.join(tempDir, "two");
+      fs.mkdirSync(firstDir, { recursive: true });
+      fs.mkdirSync(secondDir, { recursive: true });
+
+      const args = createTestArgs(OutputFormat.Json);
+      args.directory = firstDir;
+      args.directories = [firstDir, secondDir];
+
+      const output = JSON.parse(buildJsonOutput(summary, args));
+      expect(output.directory).toBe(`${firstDir}, ${secondDir}`);
+      expect("project_type" in output).toBe(false);
+    });
+
+    it("should omit line and comment metrics from JSON files-only reports", () => {
+      const summary = createTestSummary();
+      const args = createTestArgs(OutputFormat.Json);
+      args.files_only = true;
+      args.show_stats = true;
+      args.comments = true;
+
+      const output = JSON.parse(buildJsonOutput(summary, args));
+      expect(output.lines).toBeUndefined();
+      expect(output.stats.ts.lines).toBeUndefined();
+      expect(output.stats.ts.comment_lines).toBeUndefined();
+      expect(output.by_language[0].lines).toBeUndefined();
+      expect(output.by_language[0].comment_lines).toBeUndefined();
+    });
   });
 
   describe("HTML Export", () => {
@@ -227,6 +289,37 @@ describe("Export Functionality - Simple Tests", () => {
       expect(content).toContain("# LocIO Report");
       expect(content).toContain("## Summary");
       expect(content).toContain("| Total Files | 3 |");
+    });
+  });
+
+  describe("Human Report", () => {
+    it("should omit line metrics from language stats in files-only mode", () => {
+      const summary = createTestSummary();
+      const args = createTestArgs();
+      args.files_only = true;
+      args.quiet = false;
+
+      const report = buildHumanReport(summary, args);
+      expect(report).toContain("Statistics by Language:");
+      expect(report).not.toMatch(/files,\s+\d+\s+lines/);
+    });
+
+    it("should print only file counts in quiet files-only mode", () => {
+      const summary = createTestSummary();
+      const args = createTestArgs();
+      args.files_only = true;
+
+      const report = buildHumanReport(summary, args);
+      expect(report).toBe("3\n");
+    });
+
+    it("should print only line counts in quiet lines-only mode", () => {
+      const summary = createTestSummary();
+      const args = createTestArgs();
+      args.lines_only = true;
+
+      const report = buildHumanReport(summary, args);
+      expect(report).toBe("15\n");
     });
   });
 });

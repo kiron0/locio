@@ -1,5 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
+import { splitContentIntoLines } from "../files.js";
 
 export interface CommentStats {
   totalLines: number;
@@ -491,7 +492,7 @@ export function countLinesWithComments(
 ): CommentStats | null {
   try {
     const contents = content || fs.readFileSync(filePath, "utf-8");
-    const lines = contents.split(/\r?\n/);
+    const lines = splitContentIntoLines(contents);
 
     const extension = path.extname(filePath);
     const patterns = getCommentPatterns(extension);
@@ -583,7 +584,7 @@ export function removeCommentsFromFile(filePath: string): {
 } {
   try {
     const contents = fs.readFileSync(filePath, "utf-8");
-    const originalLines = contents.split(/\r?\n/);
+    const originalLines = splitContentIntoLines(contents);
 
     const extension = path.extname(filePath);
     const patterns = getCommentPatterns(extension);

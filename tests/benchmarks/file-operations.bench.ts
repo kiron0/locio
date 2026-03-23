@@ -6,31 +6,13 @@ import {
   countLinesFromContent,
   isBinaryFile,
 } from "../../src/utils/files.js";
+import { benchmark } from "./benchmark-utils.js";
 import {
   createTempDir,
   createTestFile,
   generateMockFileContent,
   removeTempDir,
 } from "../utils/test-helpers.js";
-
-async function benchmark(
-  name: string,
-  fn: () => void | Promise<void>,
-): Promise<void> {
-  const start = performance.now();
-  const result = fn();
-
-  if (result instanceof Promise) {
-    await result;
-    const end = performance.now();
-    const duration = end - start;
-    console.log(`  ${name}: ${duration.toFixed(2)}ms`);
-  } else {
-    const end = performance.now();
-    const duration = end - start;
-    console.log(`  ${name}: ${duration.toFixed(2)}ms`);
-  }
-}
 
 describe("File Operations Benchmarks", () => {
   let tempDir: string;

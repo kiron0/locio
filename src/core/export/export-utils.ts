@@ -123,6 +123,10 @@ export function groupFilesByDirectory(
 }
 
 export function isSingleFile(args: Args): boolean {
+  if (isMultiTargetScan(args)) {
+    return false;
+  }
+
   try {
     const stats = fs.statSync(args.directory);
     return stats.isFile();
@@ -131,7 +135,15 @@ export function isSingleFile(args: Args): boolean {
   }
 }
 
+export function isMultiTargetScan(args: Args): boolean {
+  return Array.isArray(args.directories) && args.directories.length > 1;
+}
+
 export function displayDirectory(args: Args): string {
+  if (isMultiTargetScan(args)) {
+    return args.directories.join(", ");
+  }
+
   const dir = args.directory;
   try {
     const stats = fs.statSync(dir);

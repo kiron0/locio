@@ -1,8 +1,13 @@
 import * as fs from "fs";
+import * as os from "os";
 import * as path from "path";
 import { describe, expect, it } from "vitest";
 import { FILE_CONSTANTS } from "../../src/core/constants.js";
-import { isPathSafe, validateExportPath } from "../../src/utils/security.js";
+import {
+  isDirectorySafeToWatch,
+  isPathSafe,
+  validateExportPath,
+} from "../../src/utils/security.js";
 
 describe("Security Utilities", () => {
   describe("isPathSafe", () => {
@@ -78,10 +83,10 @@ describe("Security Utilities", () => {
       expect(() => validateExportPath(safePath, baseDir)).not.toThrow();
     });
 
-    it("should reject export paths with path traversal", () => {
+    it("should allow export paths outside the base directory", () => {
       const baseDir = path.resolve(".");
-      const unsafePath = path.join(baseDir, "..", "..", "etc");
-      expect(() => validateExportPath(unsafePath, baseDir)).toThrow();
+      const externalPath = path.join(baseDir, "..", "..", "tmp", "exports");
+      expect(() => validateExportPath(externalPath, baseDir)).not.toThrow();
     });
 
     it("should sanitize dangerous characters in filenames", () => {
@@ -109,6 +114,17 @@ describe("Security Utilities", () => {
       const baseDir = path.resolve(".");
       const unsafePath = path.join(baseDir, "exports") + "\0";
       expect(() => validateExportPath(unsafePath, baseDir)).toThrow();
+    });
+  });
+
+  describe("isDirectorySafeToWatch", () => {
+    it("should allow normal project directories inside the home directory", () => {
+      const projectDir = path.join(os.homedir(), "projects", "locio");
+      expect(isDirectorySafeToWatch(projectDir)).toBe(true);
+    });
+
+    it("should reject watching the home directory itself", () => {
+      expect(isDirectorySafeToWatch(os.homedir())).toBe(false);
     });
   });
 });

@@ -83,6 +83,9 @@ class ExtensionCache {
 }
 
 const extensionCache = new ExtensionCache();
+const COMMENT_IGNORED_EXTENSIONS = new Set(
+  DEFAULT_RM_COMMENTS_IGNORED_EXTENSIONS.map((ext) => ext.toLowerCase()),
+);
 
 export function normalizeExtension(filePath: string): string {
   return extensionCache.normalize(filePath);
@@ -217,10 +220,7 @@ export async function processFileStatisticsWithContent(
   }
 
   const ext = normalizeExtension(filePath);
-  const ignoredExts = DEFAULT_RM_COMMENTS_IGNORED_EXTENSIONS.map((e) =>
-    e.toLowerCase(),
-  );
-  const shouldSkipComments = ignoredExts.includes(ext);
+  const shouldSkipComments = COMMENT_IGNORED_EXTENSIONS.has(ext);
 
   if (args.comments || args.code_vs_comments) {
     if (!shouldSkipComments) {
@@ -319,10 +319,7 @@ export function processFileStatistics(
   }
 
   const ext = normalizeExtension(filePath);
-  const ignoredExts = DEFAULT_RM_COMMENTS_IGNORED_EXTENSIONS.map((e) =>
-    e.toLowerCase(),
-  );
-  const shouldSkipComments = ignoredExts.includes(ext);
+  const shouldSkipComments = COMMENT_IGNORED_EXTENSIONS.has(ext);
 
   if (args.comments || args.code_vs_comments) {
     if (!shouldSkipComments) {

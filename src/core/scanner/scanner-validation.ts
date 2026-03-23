@@ -2,10 +2,9 @@ import * as fs from "fs";
 import ignore from "ignore";
 import * as path from "path";
 import type { Args } from "../../cli/args.js";
-import { isBinaryFile, parseSize } from "../../utils/files.js";
-import { isPathSafe, shouldSkipFileDueToSize } from "../../utils/security.js";
+import { isBinaryFile } from "../../utils/files.js";
+import { isPathSafe } from "../../utils/security.js";
 import { FILE_CONSTANTS } from "../constants.js";
-import { LineCounterError } from "../errors.js";
 import { shouldExcludeFile, type FilterPatterns } from "../filter/index.js";
 import type { FileStatsCache } from "./scanner-cache.js";
 import { checkMaxDepth, normalizeExtension } from "./scanner-utils.js";
@@ -53,7 +52,7 @@ export function validateFileForProcessing(
     return { shouldSkip: true };
   }
 
-  if (shouldSkipFileDueToSize(filePath, FILE_CONSTANTS.MAX_SAFE_FILE_SIZE)) {
+  if (stats.size > FILE_CONSTANTS.MAX_SAFE_FILE_SIZE) {
     return { shouldSkip: true };
   }
 
@@ -82,18 +81,12 @@ export function validateFileForProcessing(
       }
     }
 
-    if (args.max_size) {
-      const maxSize = parseSize(args.max_size);
-      if (!(maxSize instanceof LineCounterError) && size > maxSize) {
-        return { shouldSkip: true };
-      }
+    if (patterns.max_size_bytes !== undefined && size > patterns.max_size_bytes) {
+      return { shouldSkip: true };
     }
 
-    if (args.min_size) {
-      const minSize = parseSize(args.min_size);
-      if (!(minSize instanceof LineCounterError) && size < minSize) {
-        return { shouldSkip: true };
-      }
+    if (patterns.min_size_bytes !== undefined && size < patterns.min_size_bytes) {
+      return { shouldSkip: true };
     }
 
     for (const pattern of patterns.exclude_patterns) {
@@ -103,6 +96,27 @@ export function validateFileForProcessing(
     }
 
     const fileName = path.basename(filePath);
+    const parentDir = path.dirname(filePath);
+
+    for (const pattern of patterns.exclude_dirs) {
+      if (pattern.test(parentDir)) {
+        return { shouldSkip: true };
+      }
+    }
+
+    if (patterns.include_dirs.length > 0) {
+      let matches = false;
+      for (const pattern of patterns.include_dirs) {
+        if (pattern.test(parentDir)) {
+          matches = true;
+          break;
+        }
+      }
+      if (!matches) {
+        return { shouldSkip: true };
+      }
+    }
+
     for (const pattern of patterns.exclude_names) {
       if (pattern.test(fileName)) {
         return { shouldSkip: true };
@@ -126,7 +140,7 @@ export function validateFileForProcessing(
       return { shouldSkip: true };
     }
   } else {
-    if (shouldExcludeFile(filePath, args, patterns)) {
+    if (shouldExcludeFile(filePath, args, patterns, stats)) {
       return { shouldSkip: true };
     }
   }
@@ -167,32 +181,8 @@ export function filterFilesForProcessing(
       continue;
     }
 
-    const { stats, ext } = validation;
-    if (!stats || ext === undefined) {
-      continue;
-    }
-
-    if (patterns.include_extensions.length > 0) {
-      if (!patterns.include_extensions.includes(ext)) {
-        continue;
-      }
-    }
-
-    if (args.max_size) {
-      const maxSize = parseSize(args.max_size);
-      if (!(maxSize instanceof LineCounterError) && stats.size > maxSize) {
-        continue;
-      }
-    }
-
-    if (args.min_size) {
-      const minSize = parseSize(args.min_size);
-      if (!(minSize instanceof LineCounterError) && stats.size < minSize) {
-        continue;
-      }
-    }
-
-    if (args.no_empty && stats.size === 0) {
+    const { stats } = validation;
+    if (!stats) {
       continue;
     }
 

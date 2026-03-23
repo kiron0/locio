@@ -20,8 +20,6 @@ const SENSITIVE_DIRECTORIES = new Set([
   "C:\\Windows\\System32",
   "C:\\Program Files",
   "C:\\Program Files (x86)",
-
-  os.homedir(),
 ]);
 
 export function isPathSafe(filePath: string, baseDir: string): boolean {
@@ -89,6 +87,11 @@ export function validateAndSanitizePath(
 export function isDirectorySafeToWatch(dirPath: string): boolean {
   try {
     const resolved = path.resolve(dirPath);
+    const homeDir = path.resolve(os.homedir());
+
+    if (resolved === homeDir) {
+      return false;
+    }
 
     for (const sensitive of SENSITIVE_DIRECTORIES) {
       const sensitiveResolved = path.resolve(sensitive);
@@ -126,16 +129,6 @@ export function validateExportPath(
     resolvedPath = path.resolve(exportPath);
   } else {
     resolvedPath = path.resolve(baseDir, exportPath);
-  }
-
-  const baseResolved = path.resolve(baseDir);
-  const relative = path.relative(baseResolved, path.dirname(resolvedPath));
-
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
-    throw LineCounterError.exportPathError(
-      exportPath,
-      "Path traversal detected in export path",
-    );
   }
 
   const filename = path.basename(resolvedPath);

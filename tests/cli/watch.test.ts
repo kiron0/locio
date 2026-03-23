@@ -1,7 +1,13 @@
 import * as fs from "fs";
 import * as path from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { WatchCache, getDebounceMs } from "../../src/cli/watch.js";
+import {
+  WatchCache,
+  collectWatchDirectories,
+  collectWatchSnapshot,
+  detectSnapshotChanges,
+  getDebounceMs,
+} from "../../src/cli/watch.js";
 import { WATCH_CONSTANTS } from "../../src/core/constants.js";
 import { FileSystemEventRateLimiter } from "../../src/utils/security.js";
 import {
@@ -214,6 +220,32 @@ describe("Watch Mode", () => {
       const debounceMs = getDebounceMs(args);
 
       expect(debounceMs).toBe(WATCH_CONSTANTS.MAX_DEBOUNCE_MS);
+    });
+  });
+
+  describe("Fallback watchers", () => {
+    it("collects nested directories for fallback watching", () => {
+      fs.mkdirSync(path.join(tempDir, "src", "nested"), { recursive: true });
+      fs.mkdirSync(path.join(tempDir, ".git", "objects"), { recursive: true });
+
+      const directories = collectWatchDirectories(tempDir);
+
+      expect(directories).toContain(path.resolve(tempDir));
+      expect(directories).toContain(path.resolve(tempDir, "src"));
+      expect(directories).toContain(path.resolve(tempDir, "src", "nested"));
+      expect(directories).not.toContain(path.resolve(tempDir, ".git"));
+    });
+
+    it("creates non-recursive watchers for each collected directory", () => {
+      fs.mkdirSync(path.join(tempDir, "src", "nested"), { recursive: true });
+      const filePath = createTestFile(tempDir, "src/nested/file.ts", "const x = 1;");
+
+      const before = collectWatchSnapshot(tempDir);
+      fs.writeFileSync(filePath, "const x = 2;", "utf-8");
+      const after = collectWatchSnapshot(tempDir);
+      const changed = detectSnapshotChanges(before, after);
+
+      expect(changed).toContain(path.resolve(filePath));
     });
   });
 

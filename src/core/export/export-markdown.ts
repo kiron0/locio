@@ -10,10 +10,13 @@ import {
   getTopDirectories,
   getTopFiles,
   groupFilesByDirectory,
+  isMultiTargetScan,
 } from "./export-utils.js";
 
 export function buildMarkdownOutput(summary: Summary, args: Args): string {
-  const projectType = detectProjectType(args.directory);
+  const projectType = !isMultiTargetScan(args)
+    ? detectProjectType(args.directory)
+    : ProjectType.Unknown;
   let md = `# LocIO Report\n\n`;
   md += `**Directory:** ${displayDirectory(args)}\n`;
   if (projectType !== ProjectType.Unknown) {
@@ -56,10 +59,18 @@ export function buildMarkdownOutput(summary: Summary, args: Args): string {
   const langStats = getLanguageBreakdown(summary);
   if (langStats.length > 0) {
     md += `\n## Statistics by Language\n\n`;
-    md += `| Language | Files | Lines | Code | Comments | Blanks | Size |\n`;
-    md += `|----------|-------|-------|------|----------|--------|------|\n`;
-    for (const lang of langStats) {
-      md += `| ${lang.language} | ${lang.files} | ${lang.lines} | ${lang.code_lines} | ${lang.comment_lines} | ${lang.blank_lines} | ${formatSize(lang.size)} |\n`;
+    if (args.files_only) {
+      md += `| Language | Files | Size |\n`;
+      md += `|----------|-------|------|\n`;
+      for (const lang of langStats) {
+        md += `| ${lang.language} | ${lang.files} | ${formatSize(lang.size)} |\n`;
+      }
+    } else {
+      md += `| Language | Files | Lines | Code | Comments | Blanks | Size |\n`;
+      md += `|----------|-------|-------|------|----------|--------|------|\n`;
+      for (const lang of langStats) {
+        md += `| ${lang.language} | ${lang.files} | ${lang.lines} | ${lang.code_lines} | ${lang.comment_lines} | ${lang.blank_lines} | ${formatSize(lang.size)} |\n`;
+      }
     }
   }
 

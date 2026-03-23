@@ -14,6 +14,17 @@ import { formatProjectType } from "./export-utils.js";
 
 export { formatProjectType };
 
+function getExportBaseDirectory(scanPath: string): string {
+  try {
+    const stats = fs.statSync(scanPath);
+    if (stats.isFile()) {
+      return path.dirname(scanPath);
+    }
+  } catch {}
+
+  return scanPath;
+}
+
 function getFormatExtension(format: OutputFormat): string {
   switch (format) {
     case OutputFormat.Human:
@@ -61,6 +72,7 @@ function writeReportFile(summary: Summary, args: Args): void {
   const formats = Array.isArray(args.export)
     ? args.export
     : [args.export || OutputFormat.Human];
+  const exportBaseDir = getExportBaseDirectory(args.directory);
 
   for (let i = 0; i < formats.length; i++) {
     const format = formats[i];
@@ -75,7 +87,7 @@ function writeReportFile(summary: Summary, args: Args): void {
         try {
           const validatedPath = validateExportPath(
             args.export_path,
-            args.directory,
+            exportBaseDir,
           );
           targetDir = validatedPath;
           finalPath = path.join(validatedPath, filename);
@@ -86,7 +98,7 @@ function writeReportFile(summary: Summary, args: Args): void {
           continue;
         }
       } else {
-        targetDir = path.join(args.directory, "reports");
+        targetDir = path.join(exportBaseDir, "reports");
         finalPath = path.join(targetDir, filename);
       }
 

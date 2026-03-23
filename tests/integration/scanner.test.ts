@@ -1,10 +1,13 @@
+import * as fs from "fs";
 import * as path from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { scanDirectory } from "../../src/core/scanner/index.js";
+import { scanFile } from "../../src/core/scanner/scanner.js";
 import type { Args } from "../../src/cli/args.js";
 import {
   createTempDir,
   createTestDirStructure,
+  createTestFile,
   removeTempDir,
 } from "../utils/test-helpers.js";
 
@@ -230,6 +233,84 @@ describe("Scanner Integration Tests", () => {
     expect(result).toBeDefined();
     if (result && !(result instanceof Error)) {
       expect(result.total_files).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it("should apply exclude_dir when scanning a single file path", async () => {
+    const srcDir = path.join(tempDir, "src");
+    fs.mkdirSync(srcDir, { recursive: true });
+    const filePath = createTestFile(srcDir, "file.ts", "const x = 1;");
+
+    const args: Args = {
+      directory: filePath,
+      files_only: false,
+      lines_only: false,
+      exclude_patterns: [],
+      include_extensions: [],
+      exclude_extensions: [],
+      exclude_dirs: ["src"],
+      include_dirs: [],
+      exclude_names: [],
+      include_names: [],
+      no_hidden: false,
+      no_empty: false,
+      follow_links: false,
+      show_stats: false,
+      show_progress: false,
+      no_binary: false,
+      ignore_case: false,
+      quiet: true,
+      version: false,
+      watch: false,
+      comments: false,
+      code_vs_comments: false,
+      rm_comments: false,
+    };
+
+    const result = await scanFile(args);
+
+    expect(result).toBeDefined();
+    if (result && !(result instanceof Error)) {
+      expect(result.total_files).toBe(0);
+    }
+  });
+
+  it("should apply include_dir when scanning a single file path", async () => {
+    const srcDir = path.join(tempDir, "src");
+    fs.mkdirSync(srcDir, { recursive: true });
+    const filePath = createTestFile(srcDir, "file.ts", "const x = 1;");
+
+    const args: Args = {
+      directory: filePath,
+      files_only: false,
+      lines_only: false,
+      exclude_patterns: [],
+      include_extensions: [],
+      exclude_extensions: [],
+      exclude_dirs: [],
+      include_dirs: ["other"],
+      exclude_names: [],
+      include_names: [],
+      no_hidden: false,
+      no_empty: false,
+      follow_links: false,
+      show_stats: false,
+      show_progress: false,
+      no_binary: false,
+      ignore_case: false,
+      quiet: true,
+      version: false,
+      watch: false,
+      comments: false,
+      code_vs_comments: false,
+      rm_comments: false,
+    };
+
+    const result = await scanFile(args);
+
+    expect(result).toBeDefined();
+    if (result && !(result instanceof Error)) {
+      expect(result.total_files).toBe(0);
     }
   });
 });

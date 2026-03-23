@@ -23,7 +23,7 @@ describe("File Utilities with Mock File System", () => {
   describe("countLinesFromContent", () => {
     it("should count lines from content without file I/O", () => {
       expect(countLinesFromContent("line1\nline2\nline3")).toBe(3);
-      expect(countLinesFromContent("")).toBe(1);
+      expect(countLinesFromContent("")).toBe(0);
     });
   });
 

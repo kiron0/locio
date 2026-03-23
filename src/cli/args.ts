@@ -4,7 +4,8 @@ import { loadConfig, mergeConfigIntoArgs } from "./config.js";
 import {
   arrayAccumulator,
   parseCommaSeparated,
-  parseOutputFormat,
+  parseNonNegativeIntegerStrict,
+  parseOutputFormatStrict,
 } from "./utils.js";
 
 export enum OutputFormat {
@@ -235,7 +236,11 @@ export function createCommand(): Command {
     .option("--no-hidden", "Exclude hidden files")
     .option("--no-empty", "Exclude empty files")
     .option("--follow-links", "Follow symbolic links")
-    .option("--max-depth <depth>", "Maximum directory depth", parseInt)
+    .option(
+      "--max-depth <depth>",
+      "Maximum directory depth",
+      parseNonNegativeIntegerStrict,
+    )
     .option("--stats", "Show detailed statistics")
     .option("--no-progress", "Disable progress indicator (enabled by default)")
     .option("--no-binary", "Exclude binary files")
@@ -244,6 +249,7 @@ export function createCommand(): Command {
     .option(
       "--export [format]",
       "Write report to LocIO-report.{ext} in the given format (human, json, csv, tsv, markdown, html). Multiple formats can be specified comma-separated (e.g., json,html,markdown)",
+      parseOutputFormatStrict,
     )
     .option(
       "--export-path <dir>",
@@ -253,7 +259,7 @@ export function createCommand(): Command {
     .option(
       "--watch-debounce <ms>",
       "Debounce delay for watch mode in milliseconds (default: 500, min: 100, max: 5000)",
-      parseInt,
+      parseNonNegativeIntegerStrict,
     )
     .option("--no-comments", "Disable comment counting (enabled by default)")
     .option(
@@ -264,11 +270,15 @@ export function createCommand(): Command {
       "--rm-comments [extensions]",
       "Remove comments from files (modifies files in place). Optionally specify file extensions (comma-separated, e.g., js,ts,py). If no extensions specified, all files are processed.",
     )
-    .option("--top-files <n>", "Show top N largest files by size", parseInt)
+    .option(
+      "--top-files <n>",
+      "Show top N largest files by size",
+      parseNonNegativeIntegerStrict,
+    )
     .option(
       "--top-dirs <n>",
       "Show top N directories with most files",
-      parseInt,
+      parseNonNegativeIntegerStrict,
     )
     .option("--duplicates", "Detect duplicate files by content hash")
     .option(
@@ -279,9 +289,13 @@ export function createCommand(): Command {
   return program;
 }
 
-export function parseArgs(): Args {
+export function parseArgs(argv?: string[]): Args {
   const program = createCommand();
-  program.parse();
+  if (argv) {
+    program.parse(argv, { from: "user" });
+  } else {
+    program.parse();
+  }
 
   const options = program.opts();
   const positionalArgs = program.args;
@@ -310,21 +324,21 @@ export function parseArgs(): Args {
     include_names: (options["includeName"] as string[]) || [],
     max_size: options["maxSize"] as string | undefined,
     min_size: options["minSize"] as string | undefined,
-    no_hidden: (options["noHidden"] as boolean) || false,
-    no_empty: (options["noEmpty"] as boolean) || false,
+    no_hidden: options["hidden"] === false,
+    no_empty: options["empty"] === false,
     follow_links: (options["followLinks"] as boolean) || false,
     max_depth: options["maxDepth"] as number | undefined,
     show_stats: (options["stats"] as boolean) || false,
-    show_progress: (options["noProgress"] as boolean) !== true,
-    no_binary: (options["noBinary"] as boolean) || false,
+    show_progress: options["progress"] !== false,
+    no_binary: options["binary"] === false,
     ignore_case: (options["ignoreCase"] as boolean) || false,
     quiet: (options["quiet"] as boolean) || false,
-    export: parseOutputFormat(options["export"] as string | undefined),
+    export: options["export"] as OutputFormat | OutputFormat[] | undefined,
     export_path: options["exportPath"] as string | undefined,
     version: false,
     watch: (options["watch"] as boolean) || false,
     watch_debounce: options["watchDebounce"] as number | undefined,
-    comments: (options["noComments"] as boolean) !== true,
+    comments: options["comments"] !== false,
     code_vs_comments: (options["codeVsComments"] as boolean) || false,
     rm_comments: (() => {
       const rmComments = options["rmComments"];
@@ -351,20 +365,20 @@ export function parseArgs(): Args {
     includeName: "include_names",
     maxSize: "max_size",
     minSize: "min_size",
-    noHidden: "no_hidden",
-    noEmpty: "no_empty",
+    hidden: "no_hidden",
+    empty: "no_empty",
     followLinks: "follow_links",
     maxDepth: "max_depth",
     stats: "show_stats",
-    noProgress: "show_progress",
-    noBinary: "no_binary",
+    progress: "show_progress",
+    binary: "no_binary",
     ignoreCase: "ignore_case",
     quiet: "quiet",
     export: "export",
     exportPath: "export_path",
     watch: "watch",
     watchDebounce: "watch_debounce",
-    noComments: "comments",
+    comments: "comments",
     codeVsComments: "code_vs_comments",
     rmComments: "rm_comments",
     topFiles: "top_files",

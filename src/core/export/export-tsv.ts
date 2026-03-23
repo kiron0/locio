@@ -6,15 +6,26 @@ import {
   formatProjectType,
   getExtensions,
   getLanguageBreakdown,
+  isMultiTargetScan,
 } from "./export-utils.js";
 
 export function buildTsvOutput(summary: Summary, args: Args): string {
-  const projectType = detectProjectType(args.directory);
+  const projectType = !isMultiTargetScan(args)
+    ? detectProjectType(args.directory)
+    : ProjectType.Unknown;
   let out = `# Directory\t${displayDirectory(args)}\n`;
   if (projectType !== ProjectType.Unknown) {
     out += `# Project Type\t${formatProjectType(projectType)}\n`;
   }
-  if (args.comments) {
+  if (args.files_only) {
+    out += "Extension\tFiles\tSize\n";
+    const extensions = getExtensions(summary);
+    for (const ext of extensions) {
+      const count = summary.files_by_extension[ext];
+      const size = summary.size_by_extension[ext] || 0;
+      out += `${ext}\t${count}\t${size}\n`;
+    }
+  } else if (args.comments) {
     out +=
       "Extension\tFiles\tLines\tCode Lines\tComment Lines\tBlank Lines\tSize";
     if (args.code_vs_comments) {
@@ -49,10 +60,17 @@ export function buildTsvOutput(summary: Summary, args: Args): string {
   const langStats = getLanguageBreakdown(summary);
   if (langStats.length > 0) {
     out += "\n# Language Breakdown\n";
-    out +=
-      "Language\tFiles\tLines\tCode Lines\tComment Lines\tBlank Lines\tSize\n";
-    for (const lang of langStats) {
-      out += `${lang.language}\t${lang.files}\t${lang.lines}\t${lang.code_lines}\t${lang.comment_lines}\t${lang.blank_lines}\t${lang.size}\n`;
+    if (args.files_only) {
+      out += "Language\tFiles\tSize\n";
+      for (const lang of langStats) {
+        out += `${lang.language}\t${lang.files}\t${lang.size}\n`;
+      }
+    } else {
+      out +=
+        "Language\tFiles\tLines\tCode Lines\tComment Lines\tBlank Lines\tSize\n";
+      for (const lang of langStats) {
+        out += `${lang.language}\t${lang.files}\t${lang.lines}\t${lang.code_lines}\t${lang.comment_lines}\t${lang.blank_lines}\t${lang.size}\n`;
+      }
     }
   }
 

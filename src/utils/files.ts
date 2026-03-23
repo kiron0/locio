@@ -61,6 +61,9 @@ export function parseSize(sizeStr: string): number | LineCounterError {
   } else if (trimmed.endsWith("GB")) {
     number = trimmed.slice(0, -2);
     unit = 1024 * 1024 * 1024;
+  } else if (trimmed.endsWith("TB")) {
+    number = trimmed.slice(0, -2);
+    unit = 1024 * 1024 * 1024 * 1024;
   } else if (trimmed.endsWith("B") && trimmed.length > 1) {
     number = trimmed.slice(0, -1);
     unit = 1;
@@ -149,6 +152,19 @@ async function countLinesStreaming(filePath: string): Promise<number> {
       reject(error);
     });
   });
+}
+
+export function splitContentIntoLines(content: string): string[] {
+  if (content.length === 0) {
+    return [];
+  }
+
+  const lines = content.split(/\r\n|\n|\r/);
+  if (/(?:\r\n|\n|\r)$/.test(content) && lines.at(-1) === "") {
+    lines.pop();
+  }
+
+  return lines;
 }
 
 export function countLines(
@@ -248,7 +264,7 @@ export function countLinesFromContent(content: string): number {
       `Content too large: exceeds maximum safe size (${FILE_CONSTANTS.MAX_SAFE_FILE_SIZE / (1024 * 1024)}MB)`,
     );
   }
-  return content.split(/\r?\n/).length;
+  return splitContentIntoLines(content).length;
 }
 
 export function countLinesWithBlankFromContent(content: string): {
@@ -261,7 +277,7 @@ export function countLinesWithBlankFromContent(content: string): {
       `Content too large: exceeds maximum safe size (${FILE_CONSTANTS.MAX_SAFE_FILE_SIZE / (1024 * 1024)}MB)`,
     );
   }
-  const lines = content.split(/\r?\n/);
+  const lines = splitContentIntoLines(content);
 
   let blank = 0;
   let code = 0;

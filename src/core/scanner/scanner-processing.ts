@@ -1,10 +1,8 @@
 import * as path from "path";
 import type { Args } from "../../cli/args.js";
-import { parseCommaSeparated } from "../../cli/utils.js";
 import { removeCommentsFromFile } from "../../utils/formatting/index.js";
 import { ErrorCode, LineCounterError } from "../errors.js";
 import type { FilterPatterns } from "../filter/index.js";
-import { DEFAULT_RM_COMMENTS_IGNORED_EXTENSIONS } from "../filter/index.js";
 import type { Summary } from "../types.js";
 import type { FileContentCache, FileStatsCache } from "./scanner-cache.js";
 import {
@@ -25,9 +23,25 @@ function getVerboseFlag(args: Args): boolean {
   return false;
 }
 
+function shouldProcessCommentRemoval(
+  fileExt: string,
+  patterns: FilterPatterns,
+): boolean {
+  if (patterns.ignored_comment_extensions_set.has(fileExt)) {
+    return false;
+  }
+
+  if (patterns.rm_comments_all_files) {
+    return true;
+  }
+
+  return patterns.rm_comment_extensions_set?.has(fileExt) ?? false;
+}
+
 export function processCommentRemovalForFiles(
   files: string[],
   args: Args,
+  patterns: FilterPatterns,
   baseDir: string,
 ): { processed: number; errors: number } {
   let processed = 0;
@@ -37,25 +51,7 @@ export function processCommentRemovalForFiles(
     const ext = normalizeExtension(filePath);
     const fileExt = ext.toLowerCase().replace(/^\./, "");
 
-    const ignoredExts = DEFAULT_RM_COMMENTS_IGNORED_EXTENSIONS.map((e) =>
-      e.toLowerCase(),
-    );
-    if (ignoredExts.includes(fileExt)) {
-      continue;
-    }
-
-    const shouldProcess = (() => {
-      if (args.rm_comments === true) return true;
-      if (typeof args.rm_comments === "string") {
-        const allowedExts = parseCommaSeparated(args.rm_comments).map((e) =>
-          e.toLowerCase().replace(/^\./, ""),
-        );
-        return (
-          allowedExts.includes(fileExt) || allowedExts.includes(`.${fileExt}`)
-        );
-      }
-      return false;
-    })();
+    const shouldProcess = shouldProcessCommentRemoval(fileExt, patterns);
 
     if (shouldProcess) {
       const result = removeCommentsFromFile(filePath);
@@ -150,26 +146,7 @@ export async function processFile(
 
   if (args.rm_comments) {
     const fileExt = ext.toLowerCase().replace(/^\./, "");
-
-    const ignoredExts = DEFAULT_RM_COMMENTS_IGNORED_EXTENSIONS.map((e) =>
-      e.toLowerCase(),
-    );
-    if (ignoredExts.includes(fileExt)) {
-      return { processed, errors };
-    }
-
-    const shouldProcess = (() => {
-      if (args.rm_comments === true) return true;
-      if (typeof args.rm_comments === "string") {
-        const allowedExts = parseCommaSeparated(args.rm_comments).map((e) =>
-          e.toLowerCase().replace(/^\./, ""),
-        );
-        return (
-          allowedExts.includes(fileExt) || allowedExts.includes(`.${fileExt}`)
-        );
-      }
-      return false;
-    })();
+    const shouldProcess = shouldProcessCommentRemoval(fileExt, patterns);
 
     if (shouldProcess) {
       const result = removeCommentsFromFile(filePath);
@@ -210,15 +187,11 @@ export async function processFile(
   } | null = null;
 
   if (!args.files_only) {
-    const fileData = await contentCache.get(filePath);
+    const content = await contentCache.get(filePath);
     let statsResult;
 
-    if (fileData) {
-      statsResult = await processFileStatisticsWithContent(
-        filePath,
-        args,
-        fileData.content,
-      );
+    if (content !== null) {
+      statsResult = await processFileStatisticsWithContent(filePath, args, content);
     } else {
       statsResult = processFileStatistics(filePath, args);
     }

@@ -12,10 +12,13 @@ import {
   getLanguageBreakdown,
   getTopDirectories,
   getTopFiles,
+  isMultiTargetScan,
 } from "./export-utils.js";
 
 export function buildHtmlOutput(summary: Summary, args: Args): string {
-  const projectType = detectProjectType(args.directory);
+  const projectType = !isMultiTargetScan(args)
+    ? detectProjectType(args.directory)
+    : ProjectType.Unknown;
   const langStats = getLanguageBreakdown(summary);
   const extensions = getExtensions(summary);
   const extensionData = extensions.map((ext) => ({
@@ -288,7 +291,9 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
             : ""
         }
         ${
-          args.comments && summary.total_comment_lines !== undefined
+          !args.files_only &&
+          args.comments &&
+          summary.total_comment_lines !== undefined
             ? `<div class="card">
           <h3>Comment Lines</h3>
           <div class="value">${summary.total_comment_lines}</div>
@@ -322,10 +327,7 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
             <tr>
               <th>Language</th>
               <th>Files</th>
-              <th>Lines</th>
-              <th>Code</th>
-              <th>Comments</th>
-              <th>Blanks</th>
+              ${!args.files_only ? "<th>Lines</th><th>Code</th><th>Comments</th><th>Blanks</th>" : ""}
               <th>Size</th>
             </tr>
           </thead>
@@ -335,10 +337,7 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
                 (l) => `<tr>
               <td><strong>${l.language}</strong></td>
               <td>${l.files}</td>
-              <td>${l.lines}</td>
-              <td>${l.code_lines}</td>
-              <td>${l.comment_lines}</td>
-              <td>${l.blank_lines}</td>
+              ${!args.files_only ? `<td>${l.lines}</td><td>${l.code_lines}</td><td>${l.comment_lines}</td><td>${l.blank_lines}</td>` : ""}
               <td>${formatSize(l.size)}</td>
             </tr>`,
               )
@@ -544,13 +543,11 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
                 title: string;
               }> = [];
 
-              // Calculate aggregated stats for parent directories
               const aggregatedDirStats: Record<
                 string,
                 { fileCount: number; totalSize: number; totalLines: number }
               > = {};
 
-              // Initialize all directories with their direct file stats or zeros
               for (const dir of dirSet) {
                 aggregatedDirStats[dir] = dirStats[dir]
                   ? { ...dirStats[dir] }
@@ -561,22 +558,18 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
                     };
               }
 
-              // Sort directories by depth (deepest first) to calculate parent stats
               const sortedDirsByDepth = Array.from(dirSet).sort((a, b) => {
                 const depthA = a.split("/").filter((p) => p).length;
                 const depthB = b.split("/").filter((p) => p).length;
                 return depthB - depthA;
               });
 
-              // Aggregate stats from children to parents
               for (const dir of sortedDirsByDepth) {
                 const dirPath = dir === "" ? "" : dir + "/";
 
-                // Find all direct child directories and add their aggregated stats
                 for (const childDir of sortedDirsByDepth) {
                   if (childDir === dir) continue;
 
-                  // Check if this is a direct child (one level deeper and starts with parent path)
                   const childParts = childDir.split("/").filter((p) => p);
                   const dirParts = dir.split("/").filter((p) => p);
 
@@ -814,8 +807,12 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
           ? `<div class="section">
         <h2>🗂️ Interactive Treemap</h2>
         <div class="treemap-controls">
-          <button class="active" data-metric="lines">Lines</button>
-          <button data-metric="size">Size</button>
+          ${
+            args.files_only
+              ? `<button class="active" data-metric="size">Size</button>`
+              : `<button class="active" data-metric="lines">Lines</button>
+          <button data-metric="size">Size</button>`
+          }
           <button data-metric="files">Files</button>
         </div>
         <div class="treemap-breadcrumb" id="treemapBreadcrumb">
@@ -842,18 +839,22 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
         labels: ${JSON.stringify(langStats.map((l) => l.language))},
         datasets: [
           {
-            label: 'Lines',
-            data: ${JSON.stringify(langStats.map((l) => l.lines))},
-            backgroundColor: 'rgba(102, 126, 234, 0.8)',
-            borderColor: 'rgba(102, 126, 234, 1)',
-            borderWidth: 2
-          },
-          {
             label: 'Files',
             data: ${JSON.stringify(langStats.map((l) => l.files))},
             backgroundColor: 'rgba(118, 75, 162, 0.8)',
             borderColor: 'rgba(118, 75, 162, 1)',
             borderWidth: 2
+          }${
+            !args.files_only
+              ? `,
+          {
+            label: 'Lines',
+            data: ${JSON.stringify(langStats.map((l) => l.lines))},
+            backgroundColor: 'rgba(102, 126, 234, 0.8)',
+            borderColor: 'rgba(102, 126, 234, 1)',
+            borderWidth: 2
+          }`
+              : ""
           }
         ]
       },
@@ -862,7 +863,7 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
         maintainAspectRatio: false,
         plugins: {
           legend: { position: 'top' },
-          title: { display: true, text: 'Files and Lines by Language' }
+          title: { display: true, text: '${args.files_only ? "Files by Language" : "Files and Lines by Language"}' }
         }
       }
     });`
@@ -906,7 +907,7 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
           },
           title: {
             display: true,
-            text: 'Files and Lines by Extension'
+            text: '${args.files_only ? "Files by Extension" : "Files and Lines by Extension"}'
           }
         }
       }
@@ -965,11 +966,9 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
               ext: d.extension,
             }));
             return `
-    // --- TREEMAP VISUALIZATION ---
     (function() {
       const fileData = ${JSON.stringify(treemapFileData)};
 
-      // Extension to language map (subset)
       const extToLang = ${JSON.stringify(
         (() => {
           const usedExts = new Set(
@@ -990,11 +989,9 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
         return extToLang[e] || e.charAt(0).toUpperCase() + e.slice(1);
       }
 
-      // Color scale by language
       const allLangs = [...new Set(fileData.map(f => getLang(f.ext)))].sort();
       const colorScale = d3.scaleOrdinal(d3.schemeTableau10).domain(allLangs);
 
-      // Build legend
       const legendEl = document.getElementById('treemapLegend');
       if (legendEl) {
         legendEl.innerHTML = allLangs.map(lang =>
@@ -1002,7 +999,6 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
         ).join('');
       }
 
-      // Build hierarchy from flat file list
       function buildHierarchy(files, metric) {
         const root = { name: 'root', children: [] };
         for (const file of files) {
@@ -1034,7 +1030,7 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
         return root;
       }
 
-      let currentMetric = 'lines';
+      let currentMetric = '${args.files_only ? "size" : "lines"}';
       let currentRoot = null;
 
       const container = document.getElementById('treemapContainer');
@@ -1048,7 +1044,6 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
         .attr('height', height)
         .style('font-family', '-apple-system, BlinkMacSystemFont, sans-serif');
 
-      // Tooltip
       const tooltip = d3.select('#treemapContainer')
         .append('div')
         .attr('class', 'treemap-tooltip')
@@ -1106,7 +1101,6 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
             tooltip.style('display', 'none');
           })
           .on('click', function(event, d) {
-            // Navigate up: find parent directory node
             const ancestors = d.ancestors().reverse();
             if (ancestors.length > 2) {
               const parentNode = ancestors[ancestors.length - 2];
@@ -1117,7 +1111,6 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
             }
           });
 
-        // Labels for cells large enough
         cell.append('text')
           .attr('x', 4)
           .attr('y', 14)
@@ -1152,16 +1145,13 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
         }).join('');
       }
 
-      // Navigation helper
       window.__treemapNav = function(index) {
-        // Rebuild from root and navigate
         const data = buildHierarchy(fileData, currentMetric);
         renderTreemap(data);
         const breadcrumb = document.getElementById('treemapBreadcrumb');
         if (breadcrumb) breadcrumb.innerHTML = '<span>root</span>';
       };
 
-      // Metric toggle buttons
       document.querySelectorAll('.treemap-controls button').forEach(btn => {
         btn.addEventListener('click', function() {
           document.querySelectorAll('.treemap-controls button').forEach(b => b.classList.remove('active'));
@@ -1174,7 +1164,6 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
         });
       });
 
-      // Initial render
       const initialData = buildHierarchy(fileData, currentMetric);
       renderTreemap(initialData);
     })();`;

@@ -41,6 +41,11 @@ describe("parseSize", () => {
     expect(parseSize("2GB")).toBe(2 * 1024 * 1024 * 1024);
   });
 
+  it("should parse TB", () => {
+    expect(parseSize("1TB")).toBe(1024 * 1024 * 1024 * 1024);
+    expect(parseSize("2tb")).toBe(2 * 1024 * 1024 * 1024 * 1024);
+  });
+
   it("should handle decimal values", () => {
     expect(parseSize("1.5KB")).toBe(Math.floor(1.5 * 1024));
     expect(parseSize("2.5MB")).toBe(Math.floor(2.5 * 1024 * 1024));
@@ -108,7 +113,7 @@ describe("isBinaryFile", () => {
 
 describe("countLinesFromContent", () => {
   it("should count lines correctly", () => {
-    expect(countLinesFromContent("")).toBe(1);
+    expect(countLinesFromContent("")).toBe(0);
     expect(countLinesFromContent("single line")).toBe(1);
     expect(countLinesFromContent("line1\nline2")).toBe(2);
     expect(countLinesFromContent("line1\nline2\nline3")).toBe(3);
@@ -120,7 +125,7 @@ describe("countLinesFromContent", () => {
   });
 
   it("should handle Mac line endings (old format)", () => {
-    expect(countLinesFromContent("line1\rline2")).toBe(1);
+    expect(countLinesFromContent("line1\rline2")).toBe(2);
   });
 
   it("should handle mixed line endings", () => {
@@ -129,7 +134,7 @@ describe("countLinesFromContent", () => {
 
   it("should handle files without trailing newline", () => {
     expect(countLinesFromContent("line1\nline2\nline3")).toBe(3);
-    expect(countLinesFromContent("line1\nline2\nline3\n")).toBe(4);
+    expect(countLinesFromContent("line1\nline2\nline3\n")).toBe(3);
   });
 });
 
@@ -144,8 +149,8 @@ describe("countLinesWithBlankFromContent", () => {
 
   it("should handle empty content", () => {
     const result = countLinesWithBlankFromContent("");
-    expect(result.total).toBe(1);
-    expect(result.blank).toBe(1);
+    expect(result.total).toBe(0);
+    expect(result.blank).toBe(0);
     expect(result.code).toBe(0);
   });
 
@@ -182,7 +187,7 @@ describe("countLines", () => {
   it("should handle empty file", () => {
     const filePath = createTestFile(tempDir, "empty.txt", "");
     const result = countLines(filePath);
-    expect(result).toBe(1);
+    expect(result).toBe(0);
   });
 
   it("should return error for non-existent file", () => {
@@ -247,5 +252,14 @@ describe("countLinesWithBlank", () => {
     if (!(result instanceof LineCounterError)) {
       expect(result.total).toBe(3);
     }
+  });
+
+  it("does not add an extra line for trailing newlines", () => {
+    expect(countLinesFromContent("const x = 1;\n")).toBe(1);
+
+    const result = countLinesWithBlankFromContent("const x = 1;\n");
+    expect(result.total).toBe(1);
+    expect(result.blank).toBe(0);
+    expect(result.code).toBe(1);
   });
 });

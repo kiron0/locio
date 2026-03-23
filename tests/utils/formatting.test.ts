@@ -93,9 +93,9 @@ function test() {
       const result = countLinesWithComments("test.ts", "");
 
       if (result) {
-        expect(result.totalLines).toBeGreaterThanOrEqual(0);
+        expect(result.totalLines).toBe(0);
         expect(result.commentLines).toBe(0);
-        expect(result.codeLines).toBeGreaterThanOrEqual(0);
+        expect(result.codeLines).toBe(0);
       } else {
         expect(result).toBeNull();
       }
@@ -137,6 +137,16 @@ const x = 1;`;
       if (result) {
         expect(result.commentLines).toBe(1);
         expect(result.fullLineComments).toBe(1);
+      }
+    });
+
+    it("does not count a trailing newline as an extra blank line", () => {
+      const result = countLinesWithComments("test.ts", "const x = 1;\n");
+      expect(result).not.toBeNull();
+      if (result) {
+        expect(result.totalLines).toBe(1);
+        expect(result.codeLines).toBe(1);
+        expect(result.blankLines).toBe(0);
       }
     });
   });

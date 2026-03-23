@@ -4,7 +4,7 @@ import * as os from "os";
 import * as path from "path";
 import type { Args } from "../../cli/args.js";
 import { ProgressBar, ThrottledProgressBar } from "../../utils/progress.js";
-import { isPathSafe, shouldSkipFileDueToSize } from "../../utils/security.js";
+import { isPathSafe } from "../../utils/security.js";
 import {
   FILE_CONSTANTS,
   GLOB_CONSTANTS,
@@ -80,7 +80,7 @@ export async function scanFile(
       return LineCounterError.notADirectory(filePath);
     }
 
-    if (shouldSkipFileDueToSize(filePath, FILE_CONSTANTS.MAX_SAFE_FILE_SIZE)) {
+    if (fileStats.size > FILE_CONSTANTS.MAX_SAFE_FILE_SIZE) {
       return LineCounterError.io(
         `File too large: exceeds maximum safe size (${FILE_CONSTANTS.MAX_SAFE_FILE_SIZE / (1024 * 1024)}MB)`,
         undefined,
@@ -187,9 +187,6 @@ export async function scanDirectory(
   args: Args,
 ): Promise<Summary | LineCounterError> {
   const startTime = Date.now();
-  const { MemoryTracker } = await import("../../utils/metrics.js");
-  const memoryTracker = new MemoryTracker();
-  memoryTracker.checkpoint();
   const summary = createSummary();
 
   const patterns = createFilterPatterns(args);
@@ -264,8 +261,6 @@ export async function scanDirectory(
         ),
       );
 
-      memoryTracker.checkpoint();
-
       for (let i = 0; i < results.length; i++) {
         const result = results[i];
         const filePath = batch[i];
@@ -302,6 +297,7 @@ export async function scanDirectory(
       const commentRemovalResult = processCommentRemovalForFiles(
         filesToProcess,
         args,
+        patterns,
         args.directory,
       );
       processed += commentRemovalResult.processed;
@@ -333,14 +329,6 @@ export async function scanDirectory(
       args.directory,
     );
   }
-
-  const endTime = Date.now();
-  memoryTracker.checkpoint();
-  const memoryMetrics = memoryTracker.getMetrics();
-
-  (
-    summary as Summary & { _memoryMetrics?: typeof memoryMetrics }
-  )._memoryMetrics = memoryMetrics;
 
   showProgressReport(args, startTime, processed, errors);
 

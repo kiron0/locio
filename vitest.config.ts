@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
-    pool: "vmThreads",
+    pool: "forks",
     include: ["tests/**/*.{test,spec,bench}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}"],
     exclude: ["node_modules", "dist"],
     coverage: {

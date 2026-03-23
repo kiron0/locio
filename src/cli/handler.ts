@@ -106,8 +106,11 @@ async function run(args: Args): Promise<void | LineCounterError> {
 
   const { combined } = mergeSummaries(summaryMap);
   combined.by_language = groupByLanguage(combined);
+  if (args.duplicates && combined.details.length > 0) {
+    combined.duplicate_groups = findDuplicates(combined.details, targetDirs[0]!);
+  }
 
-  args.directory = targetDirs[0]!;
+  args.directories = targetDirs;
   exportReport(combined, args);
 
   return;

@@ -1,7 +1,7 @@
 import type { Args } from "../../cli/args.js";
 import { formatSize } from "../../utils/formatting/index.js";
 import { detectProjectType, ProjectType } from "../detection/index.js";
-import type { LanguageStats, Summary } from "../types.js";
+import type { Summary } from "../types.js";
 import {
   displayDirectory,
   formatProjectType,
@@ -9,11 +9,26 @@ import {
   getLanguageBreakdown,
   getTopDirectories,
   getTopFiles,
+  isMultiTargetScan,
   isSingleFile,
 } from "./export-utils.js";
 
 export function buildJsonOutput(summary: Summary, args: Args): string {
-  const projectType = detectProjectType(args.directory);
+  const projectType = !isMultiTargetScan(args)
+    ? detectProjectType(args.directory)
+    : ProjectType.Unknown;
+
+  interface JsonLanguageOutput {
+    language: string;
+    extensions: string[];
+    files: number;
+    size: number;
+    lines?: number;
+    code_lines?: number;
+    comment_lines?: number;
+    blank_lines?: number;
+  }
+
   interface JsonOutput {
     directory: string;
     project_type?: ProjectType;
@@ -56,7 +71,7 @@ export function buildJsonOutput(summary: Summary, args: Args): string {
         code_vs_comments_ratio?: number;
       }
     >;
-    by_language?: LanguageStats[];
+    by_language?: JsonLanguageOutput[];
     top_files?: Array<{
       name: string;
       directory: string;
@@ -116,8 +131,8 @@ export function buildJsonOutput(summary: Summary, args: Args): string {
       string,
       {
         files: number;
-        lines: number;
         size: number;
+        lines?: number;
         comment_lines?: number;
         code_lines?: number;
         blank_lines?: number;
@@ -132,10 +147,12 @@ export function buildJsonOutput(summary: Summary, args: Args): string {
       for (const ext of extensions) {
         stats[ext] = {
           files: summary.files_by_extension[ext],
-          lines: summary.lines_by_extension[ext] || 0,
           size: summary.size_by_extension[ext] || 0,
         };
-        if (args.comments) {
+        if (!args.files_only) {
+          stats[ext].lines = summary.lines_by_extension[ext] || 0;
+        }
+        if (!args.files_only && args.comments) {
           stats[ext].comment_lines =
             summary.comment_lines_by_extension?.[ext] || 0;
           stats[ext].code_lines = summary.code_lines_by_extension?.[ext] || 0;
@@ -165,7 +182,20 @@ export function buildJsonOutput(summary: Summary, args: Args): string {
 
   const langStats = getLanguageBreakdown(summary);
   if (langStats.length > 0) {
-    output.by_language = langStats;
+    output.by_language = langStats.map((lang) => ({
+      language: lang.language,
+      extensions: lang.extensions,
+      files: lang.files,
+      size: lang.size,
+      ...(!args.files_only
+        ? {
+            lines: lang.lines,
+            code_lines: lang.code_lines,
+            comment_lines: lang.comment_lines,
+            blank_lines: lang.blank_lines,
+          }
+        : {}),
+    }));
   }
 
   if (summary.duplicate_groups && summary.duplicate_groups.length > 0) {

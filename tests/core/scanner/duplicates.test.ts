@@ -54,7 +54,7 @@ describe("findDuplicates", () => {
 
   it("should respect maxFileSize and skip very large files", () => {
     createTestFile(tempDir, "small.ts", "console.log('small');\n");
-    const largeContent = "x".repeat(1024 * 1024); // 1MB
+    const largeContent = "x".repeat(1024 * 1024);
     createTestFile(tempDir, "large.ts", largeContent);
 
     const details: FileDetail[] = [
@@ -62,7 +62,7 @@ describe("findDuplicates", () => {
       createFileDetail("large.ts", 1),
     ];
 
-    const groups = findDuplicates(details, tempDir, 10); // 10 bytes max
+    const groups = findDuplicates(details, tempDir, 10);
 
     expect(groups.length).toBe(0);
   });
