@@ -13,6 +13,16 @@ export default defineConfig({
   dts: false,
   clean: true,
   minify: "terser",
+  minifySyntax: true,
+  terserOptions: {
+    compress: {
+      passes: 3,
+      toplevel: true,
+    },
+    mangle: {
+      toplevel: true,
+    },
+  },
   target: "es2022",
   treeshake: {
     preset: "smallest",
