@@ -31,6 +31,30 @@ function formatQuietOutput(summary: Summary, args: Args): string {
   return `${summary.total_files} ${summary.total_lines}\n`;
 }
 
+function formatExclusionReport(summary: Summary): string {
+  if (!summary.exclusions || summary.exclusions.total === 0) return "";
+
+  let out = `\nExcluded Files: ${summary.exclusions.total}\n`;
+  out += "-".repeat(60) + "\n";
+  const reasons = Object.entries(summary.exclusions.by_reason).sort(
+    ([, left], [, right]) => (right || 0) - (left || 0),
+  );
+  for (const [reason, count] of reasons) {
+    out += `  ${reason}: ${count}\n`;
+  }
+
+  if (summary.exclusions.examples.length > 0) {
+    out += "\nExamples:\n";
+    for (const example of summary.exclusions.examples) {
+      out += `  - ${example.path} (${example.reason})\n`;
+    }
+  }
+  if (summary.exclusions.omitted > 0) {
+    out += `  ... ${summary.exclusions.omitted} more omitted\n`;
+  }
+  return out;
+}
+
 export function buildHumanReport(summary: Summary, args: Args): string {
   let out = "";
 
@@ -242,6 +266,10 @@ export function buildHumanReport(summary: Summary, args: Args): string {
         out += `    - ${f.fullPath}\n`;
       }
     }
+  }
+
+  if (args.explain) {
+    out += formatExclusionReport(summary);
   }
 
   out += "\n";
@@ -501,6 +529,10 @@ export function humanReport(summary: Summary, args: Args): void {
         console.log(`    ${chalk.gray("─")} ${chalk.white(f.fullPath)}`);
       }
     }
+  }
+
+  if (args.explain) {
+    process.stdout.write(formatExclusionReport(summary));
   }
 
   console.log();

@@ -2,10 +2,13 @@ import * as fs from "fs";
 import ignore from "ignore";
 import * as path from "path";
 import type { Args } from "../../cli/args.js";
-import { isBinaryFile } from "../../utils/files.js";
 import { isPathSafe } from "../../utils/security.js";
 import { FILE_CONSTANTS } from "../constants.js";
-import { shouldExcludeFile, type FilterPatterns } from "../filter/index.js";
+import {
+  getFileExclusionReason,
+  type FilterPatterns,
+} from "../filter/index.js";
+import type { ExclusionReason, Summary } from "../types.js";
 import type { FileStatsCache } from "./scanner-cache.js";
 import { checkMaxDepth, normalizeExtension } from "./scanner-utils.js";
 
@@ -14,6 +17,38 @@ export interface FileValidationResult {
   stats?: fs.Stats;
   size?: number;
   ext?: string;
+  reason?: ExclusionReason;
+}
+
+const MAX_EXCLUSION_EXAMPLES = 100;
+
+export function recordFileExclusion(
+  summary: Summary | undefined,
+  args: Args,
+  filePath: string,
+  baseDir: string,
+  reason: ExclusionReason,
+): void {
+  if (!args.explain || !summary) return;
+
+  summary.exclusions ??= {
+    total: 0,
+    by_reason: {},
+    examples: [],
+    omitted: 0,
+  };
+  summary.exclusions.total += 1;
+  summary.exclusions.by_reason[reason] =
+    (summary.exclusions.by_reason[reason] || 0) + 1;
+
+  if (summary.exclusions.examples.length < MAX_EXCLUSION_EXAMPLES) {
+    summary.exclusions.examples.push({
+      path: path.relative(baseDir, filePath) || path.basename(filePath),
+      reason,
+    });
+  } else {
+    summary.exclusions.omitted += 1;
+  }
 }
 
 export function normalizeGlobEntries(entries: (string | object)[]): string[] {
@@ -39,116 +74,29 @@ export function validateFileForProcessing(
 ): FileValidationResult {
   if (!isSingleFile && args.max_depth !== undefined) {
     if (checkMaxDepth(filePath, baseDir, args.max_depth)) {
-      return { shouldSkip: true };
+      return { shouldSkip: true, reason: "max-depth" };
     }
   }
 
   if (!isPathSafe(filePath, baseDir)) {
-    return { shouldSkip: true };
+    return { shouldSkip: true, reason: "unsafe-path" };
   }
 
   const stats = statsCache.get(filePath);
   if (!stats || !stats.isFile()) {
-    return { shouldSkip: true };
+    return { shouldSkip: true, reason: "unreadable-or-not-file" };
   }
 
   if (stats.size > FILE_CONSTANTS.MAX_SAFE_FILE_SIZE) {
-    return { shouldSkip: true };
+    return { shouldSkip: true, reason: "too-large" };
   }
 
   const size = stats.size;
   const ext = normalizeExtension(filePath);
 
-  if (isSingleFile) {
-    if (args.no_empty && size === 0) {
-      return { shouldSkip: true };
-    }
-    if (args.no_binary && isBinaryFile(filePath)) {
-      return { shouldSkip: true };
-    }
-
-    const extLower = ext.toLowerCase().replace(/^\./, "");
-
-    if (patterns.exclude_extensions.length > 0) {
-      if (patterns.exclude_extensions.includes(extLower)) {
-        return { shouldSkip: true };
-      }
-    }
-
-    if (patterns.include_extensions.length > 0) {
-      if (!patterns.include_extensions.includes(extLower)) {
-        return { shouldSkip: true };
-      }
-    }
-
-    if (
-      patterns.max_size_bytes !== undefined &&
-      size > patterns.max_size_bytes
-    ) {
-      return { shouldSkip: true };
-    }
-
-    if (
-      patterns.min_size_bytes !== undefined &&
-      size < patterns.min_size_bytes
-    ) {
-      return { shouldSkip: true };
-    }
-
-    for (const pattern of patterns.exclude_patterns) {
-      if (pattern.test(filePath)) {
-        return { shouldSkip: true };
-      }
-    }
-
-    const fileName = path.basename(filePath);
-    const parentDir = path.dirname(filePath);
-
-    for (const pattern of patterns.exclude_dirs) {
-      if (pattern.test(parentDir)) {
-        return { shouldSkip: true };
-      }
-    }
-
-    if (patterns.include_dirs.length > 0) {
-      let matches = false;
-      for (const pattern of patterns.include_dirs) {
-        if (pattern.test(parentDir)) {
-          matches = true;
-          break;
-        }
-      }
-      if (!matches) {
-        return { shouldSkip: true };
-      }
-    }
-
-    for (const pattern of patterns.exclude_names) {
-      if (pattern.test(fileName)) {
-        return { shouldSkip: true };
-      }
-    }
-
-    if (patterns.include_names.length > 0) {
-      let matches = false;
-      for (const pattern of patterns.include_names) {
-        if (pattern.test(fileName)) {
-          matches = true;
-          break;
-        }
-      }
-      if (!matches) {
-        return { shouldSkip: true };
-      }
-    }
-
-    if (args.no_hidden && fileName.startsWith(".")) {
-      return { shouldSkip: true };
-    }
-  } else {
-    if (shouldExcludeFile(filePath, args, patterns, stats)) {
-      return { shouldSkip: true };
-    }
+  const reason = getFileExclusionReason(filePath, args, patterns, stats);
+  if (reason) {
+    return { shouldSkip: true, reason };
   }
 
   return {
@@ -166,12 +114,14 @@ export function filterFilesForProcessing(
   baseDir: string,
   statsCache: FileStatsCache,
   ignoreInstance: ignore.Ignore,
+  summary?: Summary,
 ): string[] {
   const filesToProcess: string[] = [];
 
   for (const filePath of files) {
     const relativePath = path.relative(baseDir, filePath).replace(/\\/g, "/");
     if (ignoreInstance.ignores(relativePath)) {
+      recordFileExclusion(summary, args, filePath, baseDir, "gitignore");
       continue;
     }
 
@@ -184,6 +134,15 @@ export function filterFilesForProcessing(
     );
 
     if (validation.shouldSkip) {
+      if (validation.reason) {
+        recordFileExclusion(
+          summary,
+          args,
+          filePath,
+          baseDir,
+          validation.reason,
+        );
+      }
       continue;
     }
 

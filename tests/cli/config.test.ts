@@ -3,7 +3,12 @@ import * as path from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Args } from "../../src/cli/args.js";
 import { OutputFormat } from "../../src/cli/args.js";
-import { loadConfig, mergeConfigIntoArgs } from "../../src/cli/config.js";
+import {
+  initializeConfig,
+  loadConfig,
+  mergeConfigIntoArgs,
+} from "../../src/cli/config.js";
+import { LineCounterError } from "../../src/core/errors.js";
 import { createTempDir, removeTempDir } from "../utils/test-helpers.js";
 
 describe("CLI config loading and merging", () => {
@@ -145,5 +150,21 @@ describe("CLI config loading and merging", () => {
     expect(configArgs?.include_extensions).toEqual(["ts"]);
     expect(configArgs?.max_depth).toBeUndefined();
     expect(configArgs?.top_files).toBeUndefined();
+  });
+
+  it("initializes config without overwriting unless forced", () => {
+    const created = initializeConfig(tempDir);
+    expect(created).not.toBeInstanceOf(LineCounterError);
+
+    const configPath = path.join(tempDir, ".lociorc.json");
+    const original = fs.readFileSync(configPath, "utf-8");
+    expect(JSON.parse(original).stats).toBe(true);
+
+    expect(initializeConfig(tempDir)).toBeInstanceOf(LineCounterError);
+    fs.writeFileSync(configPath, '{"custom":true}\n', "utf-8");
+    expect(initializeConfig(tempDir, true)).not.toBeInstanceOf(
+      LineCounterError,
+    );
+    expect(fs.readFileSync(configPath, "utf-8")).not.toContain("custom");
   });
 });

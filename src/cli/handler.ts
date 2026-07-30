@@ -1,5 +1,6 @@
 import chalk from "chalk";
 import * as fs from "fs";
+import * as path from "path";
 import { detectProjectType, ProjectType } from "../core/detection/index.js";
 import { ErrorCode, isError, LineCounterError } from "../core/errors.js";
 import { exportReport, formatProjectType } from "../core/export/index.js";
@@ -16,20 +17,37 @@ import { createLogger } from "../utils/logger.js";
 import { UsageStatsTracker } from "../utils/metrics.js";
 import { getPackageVersion } from "../utils/version.js";
 import type { Args } from "./args.js";
+import { initializeConfig } from "./config.js";
 import { validateDirectory } from "./utils.js";
 import { startWatchMode } from "./watch.js";
 
-async function run(args: Args): Promise<void | LineCounterError> {
+interface RunResult {
+  partialErrors: number;
+}
+
+async function run(args: Args): Promise<RunResult | LineCounterError> {
   const logger = createLogger(args);
 
   if (args.version) {
     logger.info(`LocIO ${getPackageVersion()}`);
-    return;
+    return { partialErrors: 0 };
+  }
+
+  if (args.init) {
+    const validation = validateDirectory(args.directory);
+    if (validation.error) return validation.error;
+    const targetDirectory = fs.statSync(validation.path).isFile()
+      ? path.dirname(validation.path)
+      : validation.path;
+    const initialized = initializeConfig(targetDirectory, args.force);
+    if (isError(initialized)) return initialized;
+    logger.success(`Created ${initialized.path}`);
+    return { partialErrors: 0 };
   }
 
   if (args.watch) {
     await startWatchMode(args);
-    return;
+    return { partialErrors: 0 };
   }
 
   let targetDirs = args.directories || [args.directory];
@@ -57,11 +75,13 @@ async function run(args: Args): Promise<void | LineCounterError> {
 
   const summaryMap = new Map<string, Summary>();
   const usageTracker = !args.quiet ? new UsageStatsTracker() : null;
+  let partialErrors = 0;
 
   for (const dir of targetDirs) {
     const validation = validateDirectory(dir);
     if (validation.error) {
       logger.warn(`Skipping ${dir}: ${validation.error.message}\n`);
+      partialErrors += 1;
       continue;
     }
 
@@ -84,6 +104,7 @@ async function run(args: Args): Promise<void | LineCounterError> {
 
     if (isError(result)) {
       logger.warn(`Error scanning ${dir}: ${result.message}\n`);
+      partialErrors += 1;
       continue;
     }
 
@@ -105,6 +126,22 @@ async function run(args: Args): Promise<void | LineCounterError> {
   }
 
   const { combined } = mergeSummaries(summaryMap);
+  combined._errors = (combined._errors || 0) + partialErrors;
+
+  if (args.rm_comments) {
+    const affected = combined._commentsRemoved || 0;
+    if (affected > 0) {
+      logger.success(
+        args.dry_run
+          ? `\n○ Dry run: comments would be removed from ${affected} file(s).\n`
+          : `\n✓ Comments removed successfully from ${affected} file(s)!\n`,
+      );
+    } else {
+      logger.warn("\nℹ No comments found in any files.\n");
+    }
+    return { partialErrors: combined._errors || 0 };
+  }
+
   combined.by_language = groupByLanguage(combined);
   if (args.duplicates && combined.details.length > 0) {
     combined.duplicate_groups = findDuplicates(
@@ -114,16 +151,18 @@ async function run(args: Args): Promise<void | LineCounterError> {
   }
 
   args.directories = targetDirs;
-  exportReport(combined, args);
+  const exportErrors = exportReport(combined, args);
 
-  return;
+  return {
+    partialErrors: (combined._errors || 0) + exportErrors,
+  };
 }
 
 async function runSingleDirectory(
   args: Args,
   dir: string,
   logger: ReturnType<typeof createLogger>,
-): Promise<void | LineCounterError> {
+): Promise<RunResult | LineCounterError> {
   const validation = validateDirectory(dir);
   if (validation.error) {
     return validation.error;
@@ -162,12 +201,14 @@ async function runSingleDirectory(
     const commentsRemoved = summary._commentsRemoved || 0;
     if (commentsRemoved > 0) {
       logger.success(
-        `\n✓ Comments removed successfully from ${commentsRemoved} file(s)!\n`,
+        args.dry_run
+          ? `\n○ Dry run: comments would be removed from ${commentsRemoved} file(s).\n`
+          : `\n✓ Comments removed successfully from ${commentsRemoved} file(s)!\n`,
       );
     } else {
       logger.warn("\nℹ No comments found in any files.\n");
     }
-    return;
+    return { partialErrors: summary._errors || 0 };
   }
 
   if (stats.isFile()) {
@@ -192,9 +233,11 @@ async function runSingleDirectory(
     usageTracker.trackScan(args, summary);
   }
 
-  exportReport(summary, args);
+  const exportErrors = exportReport(summary, args);
 
-  return;
+  return {
+    partialErrors: (summary._errors || 0) + exportErrors,
+  };
 }
 
 function formatError(error: LineCounterError): string {
@@ -256,6 +299,10 @@ function getErrorExamples(code: ErrorCode): string[] {
       "locio . --export json                    # Export to default location",
       "locio . --export json --export-path ./reports  # Custom path",
     ],
+    CONFIG_EXISTS: [
+      "locio . --init              # Create config if absent",
+      "locio . --init --force      # Overwrite existing config",
+    ],
   };
 
   return examples[code] || [];
@@ -268,6 +315,6 @@ export async function runWithExit(args: Args): Promise<void> {
     process.exit(1);
   }
   if (!args.watch) {
-    process.exit(0);
+    process.exit(result.partialErrors > 0 ? 2 : 0);
   }
 }

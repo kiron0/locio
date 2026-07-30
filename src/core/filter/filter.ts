@@ -9,6 +9,7 @@ import {
   type ProjectType,
 } from "../detection/index.js";
 import { LineCounterError } from "../errors.js";
+import type { ExclusionReason } from "../types.js";
 import {
   DEFAULT_IGNORED_EXTENSIONS,
   DEFAULT_RM_COMMENTS_IGNORED_EXTENSIONS,
@@ -189,17 +190,26 @@ export function shouldExcludeFile(
   patterns: FilterPatterns,
   stats?: fs.Stats,
 ): boolean {
+  return getFileExclusionReason(filePath, args, patterns, stats) !== null;
+}
+
+export function getFileExclusionReason(
+  filePath: string,
+  args: Args,
+  patterns: FilterPatterns,
+  stats?: fs.Stats,
+): ExclusionReason | null {
   const pathStr = filePath;
   const fileName = path.basename(filePath);
 
   if (patterns.combined_exclude_patterns) {
     if (patterns.combined_exclude_patterns.test(pathStr)) {
-      return true;
+      return "exclude-pattern";
     }
   } else {
     for (const pattern of patterns.exclude_patterns) {
       if (pattern.test(pathStr)) {
-        return true;
+        return "exclude-pattern";
       }
     }
   }
@@ -208,12 +218,12 @@ export function shouldExcludeFile(
   if (ext) {
     if (patterns.exclude_extensions_set) {
       if (patterns.exclude_extensions_set.has(ext)) {
-        return true;
+        return "exclude-extension";
       }
     } else {
       for (const excludeExt of patterns.exclude_extensions) {
         if (ext === excludeExt.toLowerCase()) {
-          return true;
+          return "exclude-extension";
         }
       }
     }
@@ -223,7 +233,7 @@ export function shouldExcludeFile(
       patterns.include_extensions_set.size > 0
     ) {
       if (!patterns.include_extensions_set.has(ext)) {
-        return true;
+        return "include-extension";
       }
     } else if (patterns.include_extensions.length > 0) {
       let matches = false;
@@ -234,7 +244,7 @@ export function shouldExcludeFile(
         }
       }
       if (!matches) {
-        return true;
+        return "include-extension";
       }
     }
   } else if (
@@ -242,19 +252,19 @@ export function shouldExcludeFile(
       patterns.include_extensions_set.size > 0) ||
     patterns.include_extensions.length > 0
   ) {
-    return true;
+    return "include-extension";
   }
 
   const parentDir = path.dirname(filePath);
 
   if (patterns.combined_exclude_dirs) {
     if (patterns.combined_exclude_dirs.test(parentDir)) {
-      return true;
+      return "exclude-directory";
     }
   } else {
     for (const pattern of patterns.exclude_dirs) {
       if (pattern.test(parentDir)) {
-        return true;
+        return "exclude-directory";
       }
     }
   }
@@ -268,18 +278,18 @@ export function shouldExcludeFile(
       }
     }
     if (!matches) {
-      return true;
+      return "include-directory";
     }
   }
 
   if (patterns.combined_exclude_names) {
     if (patterns.combined_exclude_names.test(fileName)) {
-      return true;
+      return "exclude-name";
     }
   } else {
     for (const pattern of patterns.exclude_names) {
       if (pattern.test(fileName)) {
-        return true;
+        return "exclude-name";
       }
     }
   }
@@ -293,12 +303,12 @@ export function shouldExcludeFile(
       }
     }
     if (!matches) {
-      return true;
+      return "include-name";
     }
   }
 
   if (args.no_hidden && fileName.startsWith(".")) {
-    return true;
+    return "hidden";
   }
 
   const size = stats?.size;
@@ -307,24 +317,24 @@ export function shouldExcludeFile(
       patterns.max_size_bytes !== undefined &&
       size > patterns.max_size_bytes
     ) {
-      return true;
+      return "max-size";
     }
 
     if (
       patterns.min_size_bytes !== undefined &&
       size < patterns.min_size_bytes
     ) {
-      return true;
+      return "min-size";
     }
 
     if (args.no_empty && size === 0) {
-      return true;
+      return "empty";
     }
   }
 
   if (args.no_binary && isBinaryFile(filePath)) {
-    return true;
+    return "binary";
   }
 
-  return false;
+  return null;
 }

@@ -13,7 +13,10 @@ import {
   processFileStatisticsWithContent,
   updateSummaryWithFile,
 } from "./scanner-utils.js";
-import { validateFileForProcessing } from "./scanner-validation.js";
+import {
+  recordFileExclusion,
+  validateFileForProcessing,
+} from "./scanner-validation.js";
 
 function shouldProcessCommentRemoval(
   fileExt: string,
@@ -92,6 +95,9 @@ export async function processFile(
   );
 
   if (validation.shouldSkip) {
+    if (validation.reason) {
+      recordFileExclusion(summary, args, filePath, baseDir, validation.reason);
+    }
     return { processed, errors };
   }
 
@@ -105,12 +111,19 @@ export async function processFile(
     const shouldProcess = shouldProcessCommentRemoval(fileExt, patterns);
 
     if (shouldProcess) {
-      const result = removeCommentsFromFile(filePath);
+      const result = removeCommentsFromFile(filePath, args.dry_run);
       if (result.success) {
         if (result.commentsFound) {
           if (!args.quiet) {
             const relativePath = path.relative(baseDir, filePath);
-            console.log(`✓ Removed comments from ${relativePath}`);
+            const message = args.dry_run
+              ? `○ Would remove comments from ${relativePath}`
+              : `✓ Removed comments from ${relativePath}`;
+            if (args.stdout !== undefined) {
+              console.error(message);
+            } else {
+              console.log(message);
+            }
           }
           processed += 1;
         }

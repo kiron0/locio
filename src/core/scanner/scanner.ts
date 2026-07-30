@@ -15,7 +15,11 @@ import { createFilterPatterns } from "../filter/index.js";
 import type { Summary } from "../types.js";
 import { createSummary } from "../types.js";
 import { FileContentCache, FileStatsCache } from "./scanner-cache.js";
-import { buildIgnoreInstance, clearGitignoreCache } from "./scanner-ignore.js";
+import {
+  buildIgnoreInstance,
+  buildIgnoreInstanceWithoutGitignore,
+  clearGitignoreCache,
+} from "./scanner-ignore.js";
 import {
   processFile,
   processFileWithErrorHandling,
@@ -168,9 +172,14 @@ export async function scanFile(
   }
 
   if (args.rm_comments) {
-    return { ...summary, _commentsRemoved: processed };
+    return {
+      ...summary,
+      _commentsRemoved: processed,
+      _errors: errors,
+    };
   }
 
+  summary._errors = errors;
   return summary;
 }
 
@@ -185,7 +194,10 @@ export async function scanDirectory(
     return patterns;
   }
 
-  const ig = buildIgnoreInstance(args.directory);
+  const ig =
+    args.use_gitignore === false
+      ? buildIgnoreInstanceWithoutGitignore()
+      : buildIgnoreInstance(args.directory);
   const statsCache = new FileStatsCache();
   const contentCache = new FileContentCache();
 
@@ -229,6 +241,7 @@ export async function scanDirectory(
       args.directory,
       statsCache,
       ig,
+      summary,
     );
 
     const concurrency = Math.min(
@@ -313,8 +326,13 @@ export async function scanDirectory(
   showProgressReport(args, startTime, processed, errors);
 
   if (args.rm_comments) {
-    return { ...summary, _commentsRemoved: processed };
+    return {
+      ...summary,
+      _commentsRemoved: processed,
+      _errors: errors,
+    };
   }
 
+  summary._errors = errors;
   return summary;
 }

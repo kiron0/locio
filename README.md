@@ -12,6 +12,12 @@
 - **Binary detection** - automatically exclude binary files
 - **Comment analysis** - count comment lines separately (full-line and inline)
 - **Remove comments** - automatically remove comments from code files
+- **Safe comment previews** - inspect comment removal with `--dry-run`
+- **Pipe-friendly output** - stream any report format with `--stdout`
+- **Explain exclusions** - see why candidate files were skipped
+- **Config generator** - create `.lociorc.json` with `--init`
+- **Gitignore control** - bypass `.gitignore` rules when needed
+- **CI-ready exit codes** - distinguish success, fatal errors, and partial scans
 - **Project type detection** - automatically detects project type (Node.js, Rust, Python, etc.)
 - **Auto-excludes** - automatically applies common excludes based on detected project type
 - **Export reports** - save results in multiple formats: `txt`, `json`, `csv`, `tsv`, `markdown`, `html`
@@ -86,7 +92,17 @@ locio --stats --export json
 locio --comments --stats
 
 # Remove comments from TypeScript files
+locio --rm-comments ts --dry-run
 locio --rm-comments ts
+
+# Pipe JSON directly to another command
+locio --stdout json --no-progress | jq '.files'
+
+# Explain exclusions
+locio --explain
+
+# Create a starter configuration
+locio --init
 
 # Watch directory for changes
 locio --watch
@@ -111,7 +127,11 @@ locio --stats --export json
 locio --code-vs-comments --stats
 
 # Remove comments from JavaScript and TypeScript files
+locio --rm-comments js,ts --dry-run
 locio --rm-comments js,ts
+
+# Include files ignored by .gitignore
+locio --no-gitignore --explain
 
 # Show top 10 largest files
 locio --stats --top-files 10
@@ -119,6 +139,12 @@ locio --stats --top-files 10
 # Watch mode with statistics
 locio --watch
 ```
+
+## Automation exit codes
+
+- `0` — completed successfully
+- `1` — fatal error; no usable scan completed
+- `2` — partial result; one or more targets/files failed
 
 ---
 

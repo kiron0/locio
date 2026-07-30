@@ -91,5 +91,20 @@ export function buildTsvOutput(summary: Summary, args: Args): string {
     }
   }
 
+  if (args.explain && summary.exclusions) {
+    out += "\n# Exclusions\nReason\tFiles\n";
+    for (const [reason, count] of Object.entries(
+      summary.exclusions.by_reason,
+    )) {
+      out += `${tsvCell(reason)}\t${count}\n`;
+    }
+    if (summary.exclusions.examples.length > 0) {
+      out += "\n# Exclusion Examples\nPath\tReason\n";
+      for (const example of summary.exclusions.examples) {
+        out += `${tsvCell(example.path)}\t${tsvCell(example.reason)}\n`;
+      }
+    }
+  }
+
   return out;
 }

@@ -88,6 +88,7 @@ export function buildJsonOutput(summary: Summary, args: Args): string {
       total_lines: number;
     }>;
     duplicate_groups?: Summary["duplicate_groups"];
+    exclusions?: Summary["exclusions"];
   }
 
   const output: JsonOutput = {
@@ -200,6 +201,10 @@ export function buildJsonOutput(summary: Summary, args: Args): string {
 
   if (summary.duplicate_groups && summary.duplicate_groups.length > 0) {
     output.duplicate_groups = summary.duplicate_groups;
+  }
+
+  if (args.explain && summary.exclusions) {
+    output.exclusions = summary.exclusions;
   }
 
   if (args.top_files && args.top_files > 0) {

@@ -8,6 +8,9 @@ export function mergeSummaries(labeled: Map<string, Summary>): {
   const combined = createSummary();
 
   for (const [, summary] of labeled) {
+    combined._errors = (combined._errors || 0) + (summary._errors || 0);
+    combined._commentsRemoved =
+      (combined._commentsRemoved || 0) + (summary._commentsRemoved || 0);
     combined.total_files += summary.total_files;
     combined.total_lines += summary.total_lines;
     combined.total_size += summary.total_size;
@@ -79,6 +82,35 @@ export function mergeSummaries(labeled: Map<string, Summary>): {
     if (summary.by_language) {
       if (!combined.by_language) combined.by_language = [];
       combined.by_language.push(...summary.by_language);
+    }
+
+    if (summary.exclusions) {
+      combined.exclusions ??= {
+        total: 0,
+        by_reason: {},
+        examples: [],
+        omitted: 0,
+      };
+      combined.exclusions.total += summary.exclusions.total;
+      combined.exclusions.omitted += summary.exclusions.omitted;
+      for (const [reason, count] of Object.entries(
+        summary.exclusions.by_reason,
+      )) {
+        combined.exclusions.by_reason[
+          reason as keyof typeof combined.exclusions.by_reason
+        ] =
+          (combined.exclusions.by_reason[
+            reason as keyof typeof combined.exclusions.by_reason
+          ] || 0) + (count || 0);
+      }
+      const remaining = Math.max(0, 100 - combined.exclusions.examples.length);
+      combined.exclusions.examples.push(
+        ...summary.exclusions.examples.slice(0, remaining),
+      );
+      combined.exclusions.omitted += Math.max(
+        0,
+        summary.exclusions.examples.length - remaining,
+      );
     }
   }
 

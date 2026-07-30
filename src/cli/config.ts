@@ -1,7 +1,8 @@
 import * as fs from "fs";
 import * as path from "path";
+import { LineCounterError } from "../core/errors.js";
 import type { Args } from "./args.js";
-import { parseOutputFormat } from "./utils.js";
+import { parseOutputFormat, parseSingleOutputFormatStrict } from "./utils.js";
 
 export interface LocIOConfig {
   exclude_patterns?: string[];
@@ -32,9 +33,70 @@ export interface LocIOConfig {
   top_dirs?: number;
   duplicates?: boolean;
   workspaces?: boolean;
+  dry_run?: boolean;
+  stdout?: string;
+  explain?: boolean;
+  no_gitignore?: boolean;
 }
 
 const CONFIG_FILES = [".lociorc.json", "locio.config.json"] as const;
+const DEFAULT_CONFIG = {
+  exclude_dirs: ["node_modules", "dist", "build", "coverage"],
+  no_binary: true,
+  comments: true,
+  stats: true,
+} satisfies LocIOConfig;
+
+export function initializeConfig(
+  directory: string,
+  force: boolean = false,
+): { path: string } | LineCounterError {
+  const configPath = path.join(path.resolve(directory), CONFIG_FILES[0]);
+
+  if (fs.existsSync(configPath)) {
+    try {
+      if (fs.lstatSync(configPath).isSymbolicLink()) {
+        return LineCounterError.io(
+          "Refusing to overwrite a symbolic-link configuration file",
+          undefined,
+          configPath,
+        );
+      }
+    } catch (error) {
+      return LineCounterError.io(
+        "Failed to inspect existing configuration file",
+        error instanceof Error ? error : undefined,
+        configPath,
+      );
+    }
+    if (!force) {
+      return LineCounterError.configExists(configPath);
+    }
+  }
+
+  try {
+    fs.writeFileSync(
+      configPath,
+      `${JSON.stringify(DEFAULT_CONFIG, null, 2)}\n`,
+      {
+        encoding: "utf-8",
+        flag: force ? "w" : "wx",
+      },
+    );
+    return { path: configPath };
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "EEXIST") {
+      return LineCounterError.configExists(configPath);
+    }
+    return LineCounterError.io(
+      `Failed to create configuration: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+      error instanceof Error ? error : undefined,
+      configPath,
+    );
+  }
+}
 
 export function loadConfig(startDir: string): Partial<Args> | null {
   let dir = path.resolve(startDir);
@@ -131,12 +193,21 @@ function mapConfigToArgs(config: LocIOConfig): Partial<Args> {
     args.duplicates = config.duplicates;
   if (typeof config.workspaces === "boolean")
     args.workspaces = config.workspaces;
+  if (typeof config.dry_run === "boolean") args.dry_run = config.dry_run;
+  if (typeof config.explain === "boolean") args.explain = config.explain;
+  if (typeof config.no_gitignore === "boolean")
+    args.use_gitignore = !config.no_gitignore;
 
   if (typeof config.export === "string") {
     const parsed = parseOutputFormat(config.export);
     if (parsed !== undefined) {
       args.export = parsed;
     }
+  }
+  if (typeof config.stdout === "string") {
+    try {
+      args.stdout = parseSingleOutputFormatStrict(config.stdout);
+    } catch {}
   }
 
   return args;

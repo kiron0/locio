@@ -29,6 +29,32 @@ export interface FileDetail {
   inline_comments?: number | null;
 }
 
+export type ExclusionReason =
+  | "gitignore"
+  | "max-depth"
+  | "unsafe-path"
+  | "unreadable-or-not-file"
+  | "too-large"
+  | "empty"
+  | "binary"
+  | "exclude-extension"
+  | "include-extension"
+  | "max-size"
+  | "min-size"
+  | "exclude-pattern"
+  | "exclude-directory"
+  | "include-directory"
+  | "exclude-name"
+  | "include-name"
+  | "hidden";
+
+export interface ExclusionReport {
+  total: number;
+  by_reason: Partial<Record<ExclusionReason, number>>;
+  examples: Array<{ path: string; reason: ExclusionReason }>;
+  omitted: number;
+}
+
 export interface Summary {
   total_files: number;
   total_lines: number;
@@ -51,6 +77,8 @@ export interface Summary {
   duplicate_groups?: DuplicateGroup[];
 
   _commentsRemoved?: number;
+  _errors?: number;
+  exclusions?: ExclusionReport;
 }
 
 export function createSummary(): Summary {

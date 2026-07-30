@@ -10,6 +10,7 @@ export enum ErrorCode {
   EXPORT_PATH_ERROR = "EXPORT_PATH_ERROR",
   FILE_PROCESSING_ERROR = "FILE_PROCESSING_ERROR",
   COMMENT_PARSING_ERROR = "COMMENT_PARSING_ERROR",
+  CONFIG_EXISTS = "CONFIG_EXISTS",
 }
 
 export class LineCounterError extends Error {
@@ -199,6 +200,18 @@ export class LineCounterError extends Error {
       ErrorCode.EXPORT_PATH_ERROR,
       {
         suggestion,
+        filePath: pathStr,
+      },
+    );
+  }
+
+  static configExists(pathStr: string): LineCounterError {
+    return new LineCounterError(
+      `Configuration file already exists: ${pathStr}`,
+      ErrorCode.CONFIG_EXISTS,
+      {
+        suggestion:
+          "Use --init --force to overwrite it, or edit the existing file.",
         filePath: pathStr,
       },
     );

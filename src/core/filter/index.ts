@@ -1,5 +1,6 @@
 export {
   createFilterPatterns,
+  getFileExclusionReason,
   shouldExcludeFile,
   type FilterPatterns,
 } from "./filter.js";

@@ -42,7 +42,7 @@ function getFormatExtension(format: OutputFormat): string {
   }
 }
 
-function buildContentForFormat(
+export function buildContentForFormat(
   format: OutputFormat,
   summary: Summary,
   args: Args,
@@ -68,11 +68,12 @@ function generateFilename(format: OutputFormat): string {
   return `LocIO-report.${ext}`;
 }
 
-function writeReportFile(summary: Summary, args: Args): void {
+function writeReportFile(summary: Summary, args: Args): number {
   const formats = Array.isArray(args.export)
     ? args.export
     : [args.export || OutputFormat.Human];
   const exportBaseDir = getExportBaseDirectory(args.directory);
+  let errors = 0;
 
   for (let i = 0; i < formats.length; i++) {
     const format = formats[i];
@@ -95,6 +96,7 @@ function writeReportFile(summary: Summary, args: Args): void {
           const error = e instanceof Error ? e : new Error(String(e));
           console.error(`\n❌ Invalid export path: ${args.export_path}`);
           console.error(`📋 Error: ${error.message}`);
+          errors += 1;
           continue;
         }
       } else {
@@ -108,7 +110,12 @@ function writeReportFile(summary: Summary, args: Args): void {
 
       fs.writeFileSync(finalPath, content, "utf-8");
       if (!args.quiet) {
-        console.log(`Report written to ${finalPath}`);
+        const message = `Report written to ${finalPath}`;
+        if (args.stdout !== undefined) {
+          console.error(message);
+        } else {
+          console.log(message);
+        }
       }
     } catch (e) {
       const error = e instanceof Error ? e : new Error(String(e));
@@ -146,15 +153,30 @@ function writeReportFile(summary: Summary, args: Args): void {
       if (suggestion) {
         console.error(`\n💡 Suggestion:\n${suggestion}`);
       }
+      errors += 1;
     }
   }
+
+  return errors;
 }
 
-export function exportReport(summary: Summary, args: Args): void {
-  if (args.export !== undefined) {
-    writeReportFile(summary, args);
-    return;
+export function exportReport(summary: Summary, args: Args): number {
+  let handled = false;
+  let errors = 0;
+
+  if (args.stdout !== undefined) {
+    const content = buildContentForFormat(args.stdout, summary, args);
+    process.stdout.write(content.endsWith("\n") ? content : `${content}\n`);
+    handled = true;
   }
 
-  humanReport(summary, args);
+  if (args.export !== undefined) {
+    errors += writeReportFile(summary, args);
+    handled = true;
+  }
+
+  if (!handled) {
+    humanReport(summary, args);
+  }
+  return errors;
 }

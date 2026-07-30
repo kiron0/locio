@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import * as process from "process";
+import { InvalidArgumentError } from "commander";
 import { parseArgs } from "./cli/args.js";
 import { runWithExit } from "./cli/handler.js";
 
@@ -10,6 +11,10 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
-  console.error("Unexpected error:", error);
+  if (error instanceof InvalidArgumentError) {
+    console.error(`error: ${error.message}`);
+  } else {
+    console.error("Unexpected error:", error);
+  }
   process.exit(1);
 });

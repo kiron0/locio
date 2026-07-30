@@ -404,6 +404,44 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
       }
 
       ${
+        args.explain && summary.exclusions
+          ? `<div class="section">
+        <h2>🔎 Exclusions</h2>
+        <p>Excluded <strong>${summary.exclusions.total}</strong> files.</p>
+        <table>
+          <thead><tr><th>Reason</th><th>Files</th></tr></thead>
+          <tbody>
+            ${Object.entries(summary.exclusions.by_reason)
+              .map(
+                ([reason, count]) =>
+                  `<tr><td>${escapeHtml(reason)}</td><td>${count}</td></tr>`,
+              )
+              .join("")}
+          </tbody>
+        </table>
+        ${
+          summary.exclusions.examples.length > 0
+            ? `<h3 style="margin-top: 20px;">Examples</h3>
+        <ul style="padding-left: 20px;">
+          ${summary.exclusions.examples
+            .map(
+              (example) =>
+                `<li><code>${escapeHtml(example.path)}</code> — ${escapeHtml(example.reason)}</li>`,
+            )
+            .join("")}
+        </ul>`
+            : ""
+        }
+        ${
+          summary.exclusions.omitted > 0
+            ? `<p>${summary.exclusions.omitted} more omitted.</p>`
+            : ""
+        }
+      </div>`
+          : ""
+      }
+
+      ${
         extensions.length > 0
           ? `<div class="section">
         <h2>📈 Statistics by Extension</h2>

@@ -91,4 +91,19 @@ describe("CLI handler integration", () => {
     expect(report.duplicate_groups).toHaveLength(1);
     expect(report.duplicate_groups[0].files).toHaveLength(2);
   });
+
+  it("uses exit code 2 when a multi-target scan partially fails", async () => {
+    createTestFile(tempDir, "valid.ts", "const valid = true;\n");
+    const args = createBaseArgs();
+    args.directories = [tempDir, path.join(tempDir, "missing")];
+
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: number,
+    ) => {
+      throw new Error(`process.exit:${code ?? 0}`);
+    }) as never);
+
+    await expect(runWithExit(args)).rejects.toThrow("process.exit:2");
+    exitSpy.mockRestore();
+  });
 });

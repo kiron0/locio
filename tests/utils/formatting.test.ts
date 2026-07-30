@@ -1,8 +1,21 @@
-import { describe, expect, it } from "vitest";
-import { countLinesWithComments } from "../../src/utils/formatting/comments.js";
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
+import { afterEach, describe, expect, it } from "vitest";
+import {
+  countLinesWithComments,
+  removeCommentsFromFile,
+} from "../../src/utils/formatting/comments.js";
 import { formatSize } from "../../src/utils/formatting/index.js";
 
 describe("Formatting Utilities", () => {
+  const tempDirs: string[] = [];
+
+  afterEach(() => {
+    for (const directory of tempDirs.splice(0)) {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
   describe("formatSize", () => {
     it("should format bytes", () => {
       expect(formatSize(0)).toBe("0 B");
@@ -36,6 +49,31 @@ describe("Formatting Utilities", () => {
   });
 
   describe("Comment Parsing", () => {
+    it("previews comment removal without writing", () => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), "locio-dry-"));
+      tempDirs.push(directory);
+      const filePath = path.join(directory, "file.ts");
+      const original = "// comment\nconst value = 1;\n";
+      fs.writeFileSync(filePath, original, "utf-8");
+
+      const result = removeCommentsFromFile(filePath, true);
+
+      expect(result).toEqual({ success: true, commentsFound: true });
+      expect(fs.readFileSync(filePath, "utf-8")).toBe(original);
+    });
+
+    it("does not rewrite comment-free files or normalize line endings", () => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), "locio-eol-"));
+      tempDirs.push(directory);
+      const filePath = path.join(directory, "file.ts");
+      const original = "const first = 1;\r\nconst second = 2;\r\n";
+      fs.writeFileSync(filePath, original, "utf-8");
+
+      const result = removeCommentsFromFile(filePath);
+
+      expect(result).toEqual({ success: true, commentsFound: false });
+      expect(fs.readFileSync(filePath, "utf-8")).toBe(original);
+    });
     it("should count comments in TypeScript code", () => {
       const code = `// Single line comment
 const x = 1; // Inline comment

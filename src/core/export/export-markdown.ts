@@ -87,6 +87,26 @@ export function buildMarkdownOutput(summary: Summary, args: Args): string {
     }
   }
 
+  if (args.explain && summary.exclusions) {
+    md += `\n## Exclusions\n\n`;
+    md += `Excluded **${summary.exclusions.total}** files.\n\n`;
+    md += `| Reason | Files |\n|--------|------:|\n`;
+    for (const [reason, count] of Object.entries(
+      summary.exclusions.by_reason,
+    )) {
+      md += `| ${reason} | ${count} |\n`;
+    }
+    if (summary.exclusions.examples.length > 0) {
+      md += `\n### Examples\n\n`;
+      for (const example of summary.exclusions.examples) {
+        md += `- \`${example.path.replace(/`/g, "\\`")}\` — ${example.reason}\n`;
+      }
+    }
+    if (summary.exclusions.omitted > 0) {
+      md += `\n_${summary.exclusions.omitted} more omitted._\n`;
+    }
+  }
+
   const extensions = getExtensions(summary);
   if (extensions.length > 0) {
     md += `\n## Statistics by Extension\n\n`;

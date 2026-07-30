@@ -1,4 +1,4 @@
-import { Command } from "commander";
+import { Command, InvalidArgumentError } from "commander";
 import { getPackageVersion } from "../utils/version.js";
 import { loadConfig, mergeConfigIntoArgs } from "./config.js";
 import {
@@ -6,6 +6,7 @@ import {
   parseCommaSeparated,
   parseNonNegativeIntegerStrict,
   parseOutputFormatStrict,
+  parseSingleOutputFormatStrict,
 } from "./utils.js";
 
 export enum OutputFormat {
@@ -54,6 +55,12 @@ export interface Args {
   duplicates?: boolean;
   workspaces?: boolean;
   directories?: string[];
+  dry_run?: boolean;
+  stdout?: OutputFormat;
+  explain?: boolean;
+  init?: boolean;
+  force?: boolean;
+  use_gitignore?: boolean;
 }
 
 function similarity(str1: string, str2: string): number {
@@ -139,6 +146,12 @@ export function createCommand(): Command {
     "quiet",
     "export",
     "export-path",
+    "stdout",
+    "explain",
+    "init",
+    "force",
+    "no-gitignore",
+    "dry-run",
     "watch",
     "no-comments",
     "code-vs-comments",
@@ -255,6 +268,15 @@ export function createCommand(): Command {
       "--export-path <dir>",
       "Specify output directory for exported reports. Files will use default naming (LocIO-report.{ext}). Directories will be created automatically if they don't exist",
     )
+    .option(
+      "--stdout <format>",
+      "Print one report format to stdout (human, json, csv, tsv, markdown, html)",
+      parseSingleOutputFormatStrict,
+    )
+    .option("--explain", "Show why files were excluded")
+    .option("--init", "Create a .lociorc.json configuration file")
+    .option("--force", "Overwrite an existing file when used with --init")
+    .option("--no-gitignore", "Do not apply .gitignore rules")
     .option("-w, --watch", "Watch directory for changes and auto-rescan")
     .option(
       "--watch-debounce <ms>",
@@ -270,6 +292,7 @@ export function createCommand(): Command {
       "--rm-comments [extensions]",
       "Remove comments from files (modifies files in place). Optionally specify file extensions (comma-separated, e.g., js,ts,py). If no extensions specified, all files are processed.",
     )
+    .option("--dry-run", "Preview --rm-comments changes without writing files")
     .option(
       "--top-files <n>",
       "Show top N largest files by size",
@@ -335,6 +358,11 @@ export function parseArgs(argv?: string[]): Args {
     quiet: (options["quiet"] as boolean) || false,
     export: options["export"] as OutputFormat | OutputFormat[] | undefined,
     export_path: options["exportPath"] as string | undefined,
+    stdout: options["stdout"] as OutputFormat | undefined,
+    explain: (options["explain"] as boolean) || false,
+    init: (options["init"] as boolean) || false,
+    force: (options["force"] as boolean) || false,
+    use_gitignore: options["gitignore"] !== false,
     version: false,
     watch: (options["watch"] as boolean) || false,
     watch_debounce: options["watchDebounce"] as number | undefined,
@@ -346,6 +374,7 @@ export function parseArgs(argv?: string[]): Args {
       if (rmComments === true) return true;
       return rmComments as string;
     })(),
+    dry_run: (options["dryRun"] as boolean) || false,
     top_files: options["topFiles"] as number | undefined,
     top_dirs: options["topDirs"] as number | undefined,
     duplicates: (options["duplicates"] as boolean) || false,
@@ -376,11 +405,17 @@ export function parseArgs(argv?: string[]): Args {
     quiet: "quiet",
     export: "export",
     exportPath: "export_path",
+    stdout: "stdout",
+    explain: "explain",
+    init: "init",
+    force: "force",
+    gitignore: "use_gitignore",
     watch: "watch",
     watchDebounce: "watch_debounce",
     comments: "comments",
     codeVsComments: "code_vs_comments",
     rmComments: "rm_comments",
+    dryRun: "dry_run",
     topFiles: "top_files",
     topDirs: "top_dirs",
     duplicates: "duplicates",
@@ -407,6 +442,14 @@ export function parseArgs(argv?: string[]): Args {
 
   if (args.code_vs_comments) {
     args.comments = true;
+  }
+
+  if (args.dry_run && !args.rm_comments) {
+    throw new InvalidArgumentError("--dry-run requires --rm-comments");
+  }
+
+  if (args.force && !args.init) {
+    throw new InvalidArgumentError("--force requires --init");
   }
 
   return args;

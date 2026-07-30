@@ -4,22 +4,32 @@ import type { Args } from "../cli/args.js";
 export class Logger {
   private quiet: boolean;
   private verboseMode: boolean;
+  private stdoutReserved: boolean;
 
   constructor(args: Args) {
     this.quiet = args.quiet || false;
+    this.stdoutReserved = args.stdout !== undefined;
 
     this.verboseMode = false;
   }
 
   info(message: string): void {
     if (!this.quiet) {
-      console.log(message);
+      if (this.stdoutReserved) {
+        console.error(message);
+      } else {
+        console.log(message);
+      }
     }
   }
 
   success(message: string): void {
     if (!this.quiet) {
-      console.log(chalk.green(message));
+      if (this.stdoutReserved) {
+        console.error(chalk.green(message));
+      } else {
+        console.log(chalk.green(message));
+      }
     }
   }
 
@@ -35,13 +45,23 @@ export class Logger {
 
   debug(message: string): void {
     if (this.verboseMode && !this.quiet) {
-      console.log(chalk.gray(`[DEBUG] ${message}`));
+      const output = chalk.gray(`[DEBUG] ${message}`);
+      if (this.stdoutReserved) {
+        console.error(output);
+      } else {
+        console.log(output);
+      }
     }
   }
 
   verbose(message: string): void {
     if (this.verboseMode && !this.quiet) {
-      console.log(chalk.gray(message));
+      const output = chalk.gray(message);
+      if (this.stdoutReserved) {
+        console.error(output);
+      } else {
+        console.log(output);
+      }
     }
   }
 }

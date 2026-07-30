@@ -1,6 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type Args, OutputFormat } from "../../../src/cli/args.js";
 import { exportReport } from "../../../src/core/export/export.js";
 import { buildHtmlOutput } from "../../../src/core/export/export-html.js";
@@ -118,6 +118,22 @@ describe("Export Functionality - Simple Tests", () => {
   }
 
   describe("JSON Export", () => {
+    it("writes structured output directly to stdout", () => {
+      const summary = createTestSummary();
+      const args = createTestArgs();
+      args.stdout = OutputFormat.Json;
+      const writeSpy = vi
+        .spyOn(process.stdout, "write")
+        .mockImplementation(() => true);
+
+      exportReport(summary, args);
+
+      const output = String(writeSpy.mock.calls[0]?.[0]);
+      expect(JSON.parse(output).files).toBe(3);
+      expect(fs.existsSync(getReportPath("LocIO-report.json"))).toBe(false);
+      writeSpy.mockRestore();
+    });
+
     it("should export summary as JSON to current directory", () => {
       const summary = createTestSummary();
       const args = createTestArgs(OutputFormat.Json);

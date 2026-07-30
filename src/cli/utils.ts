@@ -68,6 +68,16 @@ export function parseOutputFormatStrict(
   return parsed;
 }
 
+export function parseSingleOutputFormatStrict(value: string): OutputFormat {
+  const parsed = parseOutputFormatStrict(value);
+  if (!parsed || Array.isArray(parsed)) {
+    throw new InvalidArgumentError(
+      "Invalid stdout format. Choose one: human, json, csv, tsv, markdown, html",
+    );
+  }
+  return parsed;
+}
+
 export function parseNonNegativeIntegerStrict(value: string): number {
   const trimmed = value.trim();
 

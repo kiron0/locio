@@ -89,5 +89,20 @@ export function buildCsvOutput(summary: Summary, args: Args): string {
     }
   }
 
+  if (args.explain && summary.exclusions) {
+    out += "\n# Exclusions\nReason,Files\n";
+    for (const [reason, count] of Object.entries(
+      summary.exclusions.by_reason,
+    )) {
+      out += `${csvCell(reason)},${count}\n`;
+    }
+    if (summary.exclusions.examples.length > 0) {
+      out += "\n# Exclusion Examples\nPath,Reason\n";
+      for (const example of summary.exclusions.examples) {
+        out += `${csvCell(example.path)},${csvCell(example.reason)}\n`;
+      }
+    }
+  }
+
   return out;
 }

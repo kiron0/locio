@@ -578,13 +578,22 @@ export function countLinesWithComments(
   }
 }
 
-export function removeCommentsFromFile(filePath: string): {
+export function removeCommentsFromFile(
+  filePath: string,
+  dryRun: boolean = false,
+): {
   success: boolean;
   commentsFound: boolean;
 } {
   try {
     const contents = fs.readFileSync(filePath, "utf-8");
     const originalLines = splitContentIntoLines(contents);
+    const hasTrailingNewline = /(?:\r\n|\n|\r)$/.test(contents);
+    const newline = contents.includes("\r\n")
+      ? "\r\n"
+      : contents.includes("\r") && !contents.includes("\n")
+        ? "\r"
+        : "\n";
 
     const extension = path.extname(filePath);
     const patterns = getCommentPatterns(extension);
@@ -611,10 +620,14 @@ export function removeCommentsFromFile(filePath: string): {
       inMultiLineComment = processed.inMultiLineComment;
     }
 
-    const newContents = processedLines.join("\n");
+    const newContents =
+      processedLines.join(newline) +
+      (hasTrailingNewline && processedLines.length > 0 ? newline : "");
 
     if (commentsFound || newContents !== contents) {
-      fs.writeFileSync(filePath, newContents, "utf-8");
+      if (!dryRun) {
+        fs.writeFileSync(filePath, newContents, "utf-8");
+      }
       return { success: true, commentsFound: true };
     }
 

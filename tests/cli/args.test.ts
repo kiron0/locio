@@ -47,6 +47,34 @@ describe("CLI argument parsing", () => {
     expect(args.code_vs_comments).toBe(true);
   });
 
+  it("parses stdout, explain, and gitignore controls", () => {
+    const args = parseArgs([
+      tempDir,
+      "--stdout",
+      "json",
+      "--explain",
+      "--no-gitignore",
+    ]);
+
+    expect(args.stdout).toBe("json");
+    expect(args.explain).toBe(true);
+    expect(args.use_gitignore).toBe(false);
+  });
+
+  it("accepts dry-run only with comment removal", () => {
+    expect(
+      parseArgs([tempDir, "--rm-comments", "ts", "--dry-run"]).dry_run,
+    ).toBe(true);
+    expect(() => parseArgs([tempDir, "--dry-run"])).toThrow(
+      /requires --rm-comments/,
+    );
+  });
+
+  it("accepts force only with init", () => {
+    expect(parseArgs([tempDir, "--init", "--force"]).force).toBe(true);
+    expect(() => parseArgs([tempDir, "--force"])).toThrow(/requires --init/);
+  });
+
   it("rejects invalid numeric option values", () => {
     expect(() => parseNonNegativeIntegerStrict("nope")).toThrow(
       /Invalid numeric value/,

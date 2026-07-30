@@ -196,6 +196,14 @@ export function buildIgnoreInstance(dirPath: string): ignore.Ignore {
   return gitignoreCache.buildIgnoreInstance(dirPath);
 }
 
+export function buildIgnoreInstanceWithoutGitignore(): ignore.Ignore {
+  const ig = ignore();
+  ig.add(".git");
+  ig.add(".gitignore");
+  ig.add(".lcignore");
+  return ig;
+}
+
 export function clearGitignoreCache(): void {
   gitignoreCache.clearCache();
 }
