@@ -36,7 +36,11 @@ export function isPathSafe(filePath: string, baseDir: string): boolean {
 
     const relative = path.relative(resolvedBase, resolvedPath);
 
-    if (relative.includes("..") || path.isAbsolute(relative)) {
+    if (
+      relative === ".." ||
+      relative.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(relative)
+    ) {
       return false;
     }
 
@@ -73,7 +77,11 @@ export function validateAndSanitizePath(
 
   const relative = path.relative(resolvedBase, resolvedPath);
 
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+  if (
+    relative === ".." ||
+    relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative)
+  ) {
     throw LineCounterError.io(
       "Path traversal detected: file path must be within base directory",
       undefined,

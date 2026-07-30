@@ -81,11 +81,17 @@ export function validateFileForProcessing(
       }
     }
 
-    if (patterns.max_size_bytes !== undefined && size > patterns.max_size_bytes) {
+    if (
+      patterns.max_size_bytes !== undefined &&
+      size > patterns.max_size_bytes
+    ) {
       return { shouldSkip: true };
     }
 
-    if (patterns.min_size_bytes !== undefined && size < patterns.min_size_bytes) {
+    if (
+      patterns.min_size_bytes !== undefined &&
+      size < patterns.min_size_bytes
+    ) {
       return { shouldSkip: true };
     }
 
@@ -164,7 +170,7 @@ export function filterFilesForProcessing(
   const filesToProcess: string[] = [];
 
   for (const filePath of files) {
-    const relativePath = path.relative(baseDir, filePath);
+    const relativePath = path.relative(baseDir, filePath).replace(/\\/g, "/");
     if (ignoreInstance.ignores(relativePath)) {
       continue;
     }

@@ -40,6 +40,13 @@ describe("CLI argument parsing", () => {
     );
   });
 
+  it("enables comment counting for code-vs-comments mode", () => {
+    const args = parseArgs([tempDir, "--no-comments", "--code-vs-comments"]);
+
+    expect(args.comments).toBe(true);
+    expect(args.code_vs_comments).toBe(true);
+  });
+
   it("rejects invalid numeric option values", () => {
     expect(() => parseNonNegativeIntegerStrict("nope")).toThrow(
       /Invalid numeric value/,

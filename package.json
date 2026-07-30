@@ -11,6 +11,7 @@
     "build": "tsup",
     "build:watch": "tsup --watch",
     "format": "prettier --write \"**/*.{js,json,ts,md}\"",
+    "typecheck": "tsc -p tsconfig.test.json --noEmit",
     "test": "vitest run",
     "benchmark": "vitest run tests/benchmarks"
   },
@@ -39,20 +40,20 @@
     "url": "https://github.com/kiron0/locio/issues"
   },
   "dependencies": {
-    "chalk": "^5.6.2",
-    "commander": "^14.0.3",
+    "chalk": "^6.0.0",
+    "commander": "^15.0.0",
     "fast-glob": "^3.3.3",
-    "ignore": "^7.0.5"
+    "ignore": "^7.0.6"
   },
   "devDependencies": {
-    "@types/node": "^25.5.0",
-    "prettier": "^3.8.1",
-    "terser": "^5.46.1",
+    "@types/node": "^26.1.2",
+    "prettier": "^3.9.6",
+    "terser": "^5.49.0",
     "tsup": "^8.5.1",
-    "typescript": "^5.9.3",
-    "vitest": "^4.1.0"
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.12.0"
   }
 }

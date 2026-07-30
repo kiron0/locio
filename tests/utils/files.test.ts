@@ -68,6 +68,12 @@ describe("parseSize", () => {
     const result = parseSize("");
     expect(result).toBeInstanceOf(LineCounterError);
   });
+
+  it("should reject partial, negative, and unsafe numeric values", () => {
+    expect(parseSize("12MBjunk")).toBeInstanceOf(LineCounterError);
+    expect(parseSize("-1KB")).toBeInstanceOf(LineCounterError);
+    expect(parseSize("999999999999999TB")).toBeInstanceOf(LineCounterError);
+  });
 });
 
 describe("isBinaryFile", () => {
@@ -193,6 +199,11 @@ describe("countLines", () => {
   it("should return error for non-existent file", () => {
     const result = countLines(path.join(tempDir, "nonexistent.txt"));
     expect(result).toBeInstanceOf(LineCounterError);
+  });
+
+  it("should use explicitly supplied empty content", () => {
+    const result = countLines(path.join(tempDir, "nonexistent.txt"), "");
+    expect(result).toBe(0);
   });
 });
 

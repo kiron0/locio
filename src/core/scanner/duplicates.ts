@@ -21,6 +21,12 @@ export function findDuplicates(
   >();
 
   const filesToProcess = details.slice(0, DEFAULT_MAX_FILES);
+  const sizeFrequency = new Map<number, number>();
+  for (const detail of filesToProcess) {
+    if (detail.size > 0 && detail.size <= maxFileSize) {
+      sizeFrequency.set(detail.size, (sizeFrequency.get(detail.size) || 0) + 1);
+    }
+  }
 
   for (const detail of filesToProcess) {
     const fullPath = path.resolve(rootDir, detail.directory, detail.name);
@@ -29,10 +35,13 @@ export function findDuplicates(
       if (detail.size > maxFileSize) continue;
 
       if (detail.size === 0) continue;
+      if ((sizeFrequency.get(detail.size) || 0) < 2) continue;
 
       if (!fs.existsSync(fullPath)) continue;
+      const currentStats = fs.statSync(fullPath);
+      if (!currentStats.isFile() || currentStats.size !== detail.size) continue;
       const content = fs.readFileSync(fullPath);
-      const hash = crypto.createHash("md5").update(content).digest("hex");
+      const hash = crypto.createHash("sha256").update(content).digest("hex");
 
       let entry = hashMap.get(hash);
       if (!entry) {

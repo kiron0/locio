@@ -34,7 +34,7 @@ class GitignoreCache {
         for (const entry of entries) {
           const entryPath = path.join(currentDir, entry);
           try {
-            if (fs.statSync(entryPath).isDirectory() && entry !== ".git") {
+            if (fs.lstatSync(entryPath).isDirectory() && entry !== ".git") {
               collectGitignoreFiles(entryPath, baseDir);
             }
           } catch {}
@@ -167,7 +167,7 @@ class GitignoreCache {
         for (const entry of entries) {
           const entryPath = path.join(currentDir, entry);
           try {
-            if (fs.statSync(entryPath).isDirectory() && entry !== ".git") {
+            if (fs.lstatSync(entryPath).isDirectory() && entry !== ".git") {
               readGitignoreFiles(entryPath, baseDir);
             }
           } catch {}

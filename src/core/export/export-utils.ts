@@ -135,7 +135,9 @@ export function isSingleFile(args: Args): boolean {
   }
 }
 
-export function isMultiTargetScan(args: Args): boolean {
+export function isMultiTargetScan(
+  args: Args,
+): args is Args & { directories: string[] } {
   return Array.isArray(args.directories) && args.directories.length > 1;
 }
 

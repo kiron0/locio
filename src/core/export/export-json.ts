@@ -47,7 +47,7 @@ export function buildJsonOutput(summary: Summary, args: Args): string {
       string,
       {
         files: number;
-        lines: number;
+        lines?: number;
         size: number;
         comment_lines?: number;
         code_lines?: number;
@@ -61,7 +61,7 @@ export function buildJsonOutput(summary: Summary, args: Args): string {
       string,
       {
         files: number;
-        lines: number;
+        lines?: number;
         size: number;
         comment_lines?: number;
         code_lines?: number;

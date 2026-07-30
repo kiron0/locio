@@ -127,4 +127,23 @@ describe("CLI config loading and merging", () => {
     expect(merged.no_binary).toBe(true);
     expect(merged.include_extensions).toEqual(["ts"]);
   });
+
+  it("ignores arrays containing non-string config values", () => {
+    fs.writeFileSync(
+      path.join(tempDir, ".lociorc.json"),
+      JSON.stringify({
+        exclude_extensions: ["js", 42],
+        include_extensions: ["ts"],
+        max_depth: -1,
+        top_files: 1.5,
+      }),
+      "utf-8",
+    );
+
+    const configArgs = loadConfig(tempDir);
+    expect(configArgs?.exclude_extensions).toBeUndefined();
+    expect(configArgs?.include_extensions).toEqual(["ts"]);
+    expect(configArgs?.max_depth).toBeUndefined();
+    expect(configArgs?.top_files).toBeUndefined();
+  });
 });

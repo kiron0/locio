@@ -49,35 +49,22 @@ function containsNullBytes(content: string): boolean {
 
 export function parseSize(sizeStr: string): number | LineCounterError {
   const trimmed = sizeStr.trim().toUpperCase();
-  let number: string;
-  let unit: number;
-
-  if (trimmed.endsWith("KB")) {
-    number = trimmed.slice(0, -2);
-    unit = 1024;
-  } else if (trimmed.endsWith("MB")) {
-    number = trimmed.slice(0, -2);
-    unit = 1024 * 1024;
-  } else if (trimmed.endsWith("GB")) {
-    number = trimmed.slice(0, -2);
-    unit = 1024 * 1024 * 1024;
-  } else if (trimmed.endsWith("TB")) {
-    number = trimmed.slice(0, -2);
-    unit = 1024 * 1024 * 1024 * 1024;
-  } else if (trimmed.endsWith("B") && trimmed.length > 1) {
-    number = trimmed.slice(0, -1);
-    unit = 1;
-  } else {
-    number = trimmed;
-    unit = 1;
-  }
-
-  const parsed = parseFloat(number);
-  if (isNaN(parsed)) {
+  const match = trimmed.match(/^(\d+(?:\.\d+)?|\.\d+)(B|KB|MB|GB|TB)?$/);
+  if (!match) {
     return LineCounterError.invalidSizeFormat(sizeStr);
   }
 
-  return Math.floor(parsed * unit);
+  const units: Record<string, number> = {
+    B: 1,
+    KB: 1024,
+    MB: 1024 ** 2,
+    GB: 1024 ** 3,
+    TB: 1024 ** 4,
+  };
+  const bytes = Math.floor(Number(match[1]) * units[match[2] || "B"]);
+  return Number.isSafeInteger(bytes)
+    ? bytes
+    : LineCounterError.invalidSizeFormat(sizeStr);
 }
 
 export function isBinaryFile(filePath: string, content?: string): boolean {
@@ -86,7 +73,7 @@ export function isBinaryFile(filePath: string, content?: string): boolean {
     return true;
   }
 
-  if (content) {
+  if (content !== undefined) {
     return containsNullBytes(content);
   }
 
@@ -94,8 +81,12 @@ export function isBinaryFile(filePath: string, content?: string): boolean {
     const bufferSize = FILE_CONSTANTS.BINARY_DETECTION_BUFFER_SIZE;
     const buffer = Buffer.alloc(bufferSize);
     const fd = fs.openSync(filePath, "r");
-    const bytesRead = fs.readSync(fd, buffer, 0, bufferSize, 0);
-    fs.closeSync(fd);
+    let bytesRead: number;
+    try {
+      bytesRead = fs.readSync(fd, buffer, 0, bufferSize, 0);
+    } finally {
+      fs.closeSync(fd);
+    }
 
     if (bytesRead === 0) {
       return false;
@@ -171,7 +162,7 @@ export function countLines(
   filePath: string,
   content?: string,
 ): number | LineCounterError {
-  if (content) {
+  if (content !== undefined) {
     return countLinesFromContent(content);
   }
 
@@ -217,7 +208,7 @@ export async function countLinesAsync(
   filePath: string,
   content?: string,
 ): Promise<number | LineCounterError> {
-  if (content) {
+  if (content !== undefined) {
     return countLinesFromContent(content);
   }
 
@@ -297,7 +288,7 @@ export function countLinesWithBlank(
   filePath: string,
   content?: string,
 ): { total: number; blank: number; code: number } | LineCounterError {
-  if (content) {
+  if (content !== undefined) {
     return countLinesWithBlankFromContent(content);
   }
 

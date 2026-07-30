@@ -15,6 +15,38 @@ import {
   isMultiTargetScan,
 } from "./export-utils.js";
 
+function escapeHtml(value: unknown): string {
+  return String(value).replace(
+    /[&<>"']/g,
+    (character) =>
+      (
+        ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;",
+        }) as Record<string, string>
+      )[character]!,
+  );
+}
+
+function serializeForInlineScript(value: unknown): string {
+  return JSON.stringify(value).replace(
+    /[<>&\u2028\u2029]/g,
+    (character) =>
+      (
+        ({
+          "<": "\\u003c",
+          ">": "\\u003e",
+          "&": "\\u0026",
+          "\u2028": "\\u2028",
+          "\u2029": "\\u2029",
+        }) as Record<string, string>
+      )[character]!,
+  );
+}
+
 export function buildHtmlOutput(summary: Summary, args: Args): string {
   const projectType = !isMultiTargetScan(args)
     ? detectProjectType(args.directory)
@@ -36,7 +68,7 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LocIO Report - ${displayDirectory(args)}</title>
+  <title>LocIO Report - ${escapeHtml(displayDirectory(args))}</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
@@ -269,7 +301,7 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
   <div class="container">
     <div class="header">
       <h1>LocIO Report</h1>
-      <p>Directory: ${displayDirectory(args)}</p>
+      <p>Directory: ${escapeHtml(displayDirectory(args))}</p>
       ${projectType !== ProjectType.Unknown ? `<p>Project Type: <strong>${formatProjectType(projectType)}</strong></p>` : ""}
     </div>
     <div class="content">
@@ -335,7 +367,7 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
             ${langStats
               .map(
                 (l) => `<tr>
-              <td><strong>${l.language}</strong></td>
+              <td><strong>${escapeHtml(l.language)}</strong></td>
               <td>${l.files}</td>
               ${!args.files_only ? `<td>${l.lines}</td><td>${l.code_lines}</td><td>${l.comment_lines}</td><td>${l.blank_lines}</td>` : ""}
               <td>${formatSize(l.size)}</td>
@@ -362,7 +394,7 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
             ${group.files.length} copies &middot; ${group.lines} lines each &middot; ${group.lines * (group.files.length - 1)} lines wasted &middot; ${formatSize(group.size)}
           </div>
           <ul style="margin: 0; padding-left: 20px;">
-            ${group.files.map((f) => `<li><code>${f.fullPath}</code></li>`).join("")}
+            ${group.files.map((f) => `<li><code>${escapeHtml(f.fullPath)}</code></li>`).join("")}
           </ul>
         </div>`,
           )
@@ -392,7 +424,7 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
             ${extensionData
               .map(
                 (d) => `<tr>
-              <td><strong>${d.ext}</strong></td>
+              <td><strong>${escapeHtml(d.ext)}</strong></td>
               <td>${d.files}</td>
               ${!args.lines_only ? `<td>${formatSize(d.size)}</td>` : ""}
               ${!args.files_only ? `<td>${d.lines}</td>` : ""}
@@ -439,8 +471,8 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
               .map(
                 (file) => `<tr>
               <td><strong>${formatSize(file.size)}</strong></td>
-              <td>${file.name}</td>
-              <td><code>${file.extension}</code></td>
+              <td>${escapeHtml(file.name)}</td>
+              <td><code>${escapeHtml(file.extension)}</code></td>
               ${!args.files_only && file.lines !== null ? `<td>${file.lines}</td>` : ""}
             </tr>`,
               )
@@ -472,7 +504,7 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
               .map(
                 (dir) => `<tr>
               <td><strong>${dir.fileCount}</strong></td>
-              <td>${dir.directory}</td>
+              <td>${escapeHtml(dir.directory)}</td>
               <td>${formatSize(dir.totalSize)}</td>
               ${!args.files_only ? `<td>${dir.totalLines}</td>` : ""}
             </tr>`,
@@ -626,7 +658,7 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
                 }
               }
 
-              const filesToShow = summary.details
+              const filesToShow = [...summary.details]
                 .sort((a, b) => b.size - a.size)
                 .slice(0, 100);
 
@@ -683,8 +715,8 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
           </div>
         </div>
         <script type="text/javascript">
-          const nodes = new vis.DataSet(${JSON.stringify(nodesData)});
-          const edges = new vis.DataSet(${JSON.stringify(edgesData)});
+          const nodes = new vis.DataSet(${serializeForInlineScript(nodesData)});
+          const edges = new vis.DataSet(${serializeForInlineScript(edgesData)});
 
           const data = {
             nodes: nodes,
@@ -788,7 +820,7 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
                 box-shadow: 0 2px 8px rgba(0,0,0,0.1);
                 color: ${avgIntensity > 50 ? "white" : "#2d3748"};
               ">
-                <div style="font-weight: bold; margin-bottom: 8px; font-size: 0.9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${dir}">${dir.split("/").pop() || dir}</div>
+                <div style="font-weight: bold; margin-bottom: 8px; font-size: 0.9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(dir)}">${escapeHtml(dir.split("/").pop() || dir)}</div>
                 <div style="font-size: 0.8em; opacity: 0.9;">
                   <div>📄 ${stats.fileCount} files</div>
                   <div>💾 ${formatSize(stats.totalSize)}</div>
@@ -836,11 +868,11 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
     new Chart(langCtx, {
       type: 'bar',
       data: {
-        labels: ${JSON.stringify(langStats.map((l) => l.language))},
+        labels: ${serializeForInlineScript(langStats.map((l) => l.language))},
         datasets: [
           {
             label: 'Files',
-            data: ${JSON.stringify(langStats.map((l) => l.files))},
+            data: ${serializeForInlineScript(langStats.map((l) => l.files))},
             backgroundColor: 'rgba(118, 75, 162, 0.8)',
             borderColor: 'rgba(118, 75, 162, 1)',
             borderWidth: 2
@@ -849,7 +881,7 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
               ? `,
           {
             label: 'Lines',
-            data: ${JSON.stringify(langStats.map((l) => l.lines))},
+            data: ${serializeForInlineScript(langStats.map((l) => l.lines))},
             backgroundColor: 'rgba(102, 126, 234, 0.8)',
             borderColor: 'rgba(102, 126, 234, 1)',
             borderWidth: 2
@@ -876,13 +908,13 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
     new Chart(extensionCtx, {
       type: 'bar',
       data: {
-        labels: ${JSON.stringify(extensions)},
+        labels: ${serializeForInlineScript(extensions)},
         datasets: [
           ${
             !args.files_only
               ? `{
             label: 'Lines',
-            data: ${JSON.stringify(extensions.map((e) => summary.lines_by_extension[e] || 0))},
+            data: ${serializeForInlineScript(extensions.map((e) => summary.lines_by_extension[e] || 0))},
             backgroundColor: 'rgba(102, 126, 234, 0.8)',
             borderColor: 'rgba(102, 126, 234, 1)',
             borderWidth: 2
@@ -891,7 +923,7 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
           }
           {
             label: 'Files',
-            data: ${JSON.stringify(extensions.map((e) => summary.files_by_extension?.[e] || 0))},
+            data: ${serializeForInlineScript(extensions.map((e) => summary.files_by_extension?.[e] || 0))},
             backgroundColor: 'rgba(118, 75, 162, 0.8)',
             borderColor: 'rgba(118, 75, 162, 1)',
             borderWidth: 2
@@ -967,9 +999,9 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
             }));
             return `
     (function() {
-      const fileData = ${JSON.stringify(treemapFileData)};
+      const fileData = ${serializeForInlineScript(treemapFileData)};
 
-      const extToLang = ${JSON.stringify(
+      const extToLang = ${serializeForInlineScript(
         (() => {
           const usedExts = new Set(
             summary.details.map((d: { extension: string }) =>
@@ -989,13 +1021,23 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
         return extToLang[e] || e.charAt(0).toUpperCase() + e.slice(1);
       }
 
+      function escapeHtmlText(value) {
+        return String(value).replace(/[&<>"']/g, character => ({
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#39;'
+        })[character]);
+      }
+
       const allLangs = [...new Set(fileData.map(f => getLang(f.ext)))].sort();
       const colorScale = d3.scaleOrdinal(d3.schemeTableau10).domain(allLangs);
 
       const legendEl = document.getElementById('treemapLegend');
       if (legendEl) {
         legendEl.innerHTML = allLangs.map(lang =>
-          '<div class="treemap-lang-item"><div class="treemap-lang-swatch" style="background:' + colorScale(lang) + '"></div>' + lang + '</div>'
+          '<div class="treemap-lang-item"><div class="treemap-lang-swatch" style="background:' + colorScale(lang) + '"></div>' + escapeHtmlText(lang) + '</div>'
         ).join('');
       }
 
@@ -1139,9 +1181,9 @@ export function buildHtmlOutput(summary: Summary, args: Args): string {
         }
         breadcrumb.innerHTML = ancestors.map((a, i) => {
           if (i === ancestors.length - 1) {
-            return '<span>' + (a.data.name || 'root') + '</span>';
+            return '<span>' + escapeHtmlText(a.data.name || 'root') + '</span>';
           }
-          return '<span onclick="window.__treemapNav(' + i + ')">' + (a.data.name || 'root') + '</span> / ';
+          return '<span onclick="window.__treemapNav(' + i + ')">' + escapeHtmlText(a.data.name || 'root') + '</span> / ';
         }).join('');
       }
 

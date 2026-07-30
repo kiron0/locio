@@ -15,14 +15,6 @@ import {
 } from "./scanner-utils.js";
 import { validateFileForProcessing } from "./scanner-validation.js";
 
-function hasVerboseFlag(args: Args): args is Args & { verbose?: boolean } {
-  return true;
-}
-
-function getVerboseFlag(args: Args): boolean {
-  return false;
-}
-
 function shouldProcessCommentRemoval(
   fileExt: string,
   patterns: FilterPatterns,
@@ -36,44 +28,6 @@ function shouldProcessCommentRemoval(
   }
 
   return patterns.rm_comment_extensions_set?.has(fileExt) ?? false;
-}
-
-export function processCommentRemovalForFiles(
-  files: string[],
-  args: Args,
-  patterns: FilterPatterns,
-  baseDir: string,
-): { processed: number; errors: number } {
-  let processed = 0;
-  let errors = 0;
-
-  for (const filePath of files) {
-    const ext = normalizeExtension(filePath);
-    const fileExt = ext.toLowerCase().replace(/^\./, "");
-
-    const shouldProcess = shouldProcessCommentRemoval(fileExt, patterns);
-
-    if (shouldProcess) {
-      const result = removeCommentsFromFile(filePath);
-      if (result.success) {
-        if (result.commentsFound) {
-          if (!args.quiet) {
-            const relativePath = path.relative(baseDir, filePath);
-            console.log(`✓ Removed comments from ${relativePath}`);
-          }
-          processed += 1;
-        }
-      } else {
-        if (!args.quiet) {
-          const relativePath = path.relative(baseDir, filePath);
-          console.error(`✗ Failed to remove comments from ${relativePath}`);
-        }
-        errors += 1;
-      }
-    }
-  }
-
-  return { processed, errors };
 }
 
 export async function processFileWithErrorHandling(
@@ -106,8 +60,10 @@ export async function processFileWithErrorHandling(
               error,
             );
 
-      if (getVerboseFlag(args) && !args.quiet) {
-        console.warn(`⚠️  Error processing ${filePath}: ${error.message}`);
+      if (!args.quiet) {
+        console.warn(
+          `⚠️  Error processing ${filePath}: ${processingError.message}`,
+        );
       }
     }
     return { processed: 0, errors: 1 };
@@ -191,7 +147,11 @@ export async function processFile(
     let statsResult;
 
     if (content !== null) {
-      statsResult = await processFileStatisticsWithContent(filePath, args, content);
+      statsResult = await processFileStatisticsWithContent(
+        filePath,
+        args,
+        content,
+      );
     } else {
       statsResult = processFileStatistics(filePath, args);
     }
@@ -201,7 +161,7 @@ export async function processFile(
         statsResult.error.code === ErrorCode.COMMENT_PARSING_ERROR &&
         statsResult.lines !== null
       ) {
-        if (!args.quiet && getVerboseFlag(args)) {
+        if (!args.quiet) {
           console.warn(
             `⚠️  Comment parsing failed for ${path.relative(baseDir, filePath)}, using basic line count`,
           );

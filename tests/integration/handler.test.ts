@@ -75,11 +75,11 @@ describe("CLI handler integration", () => {
     args.directories = [dirOne, dirTwo];
     args.duplicates = true;
 
-    const exitSpy = vi
-      .spyOn(process, "exit")
-      .mockImplementation(((code?: number) => {
-        throw new Error(`process.exit:${code ?? 0}`);
-      }) as never);
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: number,
+    ) => {
+      throw new Error(`process.exit:${code ?? 0}`);
+    }) as never);
 
     await expect(runWithExit(args)).rejects.toThrow("process.exit:0");
     exitSpy.mockRestore();

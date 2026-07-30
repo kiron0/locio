@@ -84,20 +84,24 @@ function readJsonFile(filePath: string): Record<string, unknown> | null {
 
 function mapConfigToArgs(config: LocIOConfig): Partial<Args> {
   const args: Partial<Args> = {};
+  const isStringArray = (value: unknown): value is string[] =>
+    Array.isArray(value) && value.every((item) => typeof item === "string");
+  const isNonNegativeInteger = (value: unknown): value is number =>
+    typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 
-  if (Array.isArray(config.exclude_patterns))
+  if (isStringArray(config.exclude_patterns))
     args.exclude_patterns = config.exclude_patterns;
-  if (Array.isArray(config.exclude_extensions))
+  if (isStringArray(config.exclude_extensions))
     args.exclude_extensions = config.exclude_extensions;
-  if (Array.isArray(config.include_extensions))
+  if (isStringArray(config.include_extensions))
     args.include_extensions = config.include_extensions;
-  if (Array.isArray(config.exclude_dirs))
+  if (isStringArray(config.exclude_dirs))
     args.exclude_dirs = config.exclude_dirs;
-  if (Array.isArray(config.include_dirs))
+  if (isStringArray(config.include_dirs))
     args.include_dirs = config.include_dirs;
-  if (Array.isArray(config.exclude_names))
+  if (isStringArray(config.exclude_names))
     args.exclude_names = config.exclude_names;
-  if (Array.isArray(config.include_names))
+  if (isStringArray(config.include_names))
     args.include_names = config.include_names;
   if (typeof config.max_size === "string") args.max_size = config.max_size;
   if (typeof config.min_size === "string") args.min_size = config.min_size;
@@ -105,7 +109,7 @@ function mapConfigToArgs(config: LocIOConfig): Partial<Args> {
   if (typeof config.no_empty === "boolean") args.no_empty = config.no_empty;
   if (typeof config.follow_links === "boolean")
     args.follow_links = config.follow_links;
-  if (typeof config.max_depth === "number") args.max_depth = config.max_depth;
+  if (isNonNegativeInteger(config.max_depth)) args.max_depth = config.max_depth;
   if (typeof config.stats === "boolean") args.show_stats = config.stats;
   if (typeof config.no_progress === "boolean")
     args.show_progress = !config.no_progress;
@@ -116,13 +120,13 @@ function mapConfigToArgs(config: LocIOConfig): Partial<Args> {
   if (typeof config.export_path === "string")
     args.export_path = config.export_path;
   if (typeof config.watch === "boolean") args.watch = config.watch;
-  if (typeof config.watch_debounce === "number")
+  if (isNonNegativeInteger(config.watch_debounce))
     args.watch_debounce = config.watch_debounce;
   if (typeof config.comments === "boolean") args.comments = config.comments;
   if (typeof config.code_vs_comments === "boolean")
     args.code_vs_comments = config.code_vs_comments;
-  if (typeof config.top_files === "number") args.top_files = config.top_files;
-  if (typeof config.top_dirs === "number") args.top_dirs = config.top_dirs;
+  if (isNonNegativeInteger(config.top_files)) args.top_files = config.top_files;
+  if (isNonNegativeInteger(config.top_dirs)) args.top_dirs = config.top_dirs;
   if (typeof config.duplicates === "boolean")
     args.duplicates = config.duplicates;
   if (typeof config.workspaces === "boolean")

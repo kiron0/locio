@@ -6,6 +6,7 @@ import { FILE_CONSTANTS } from "../../src/core/constants.js";
 import {
   isDirectorySafeToWatch,
   isPathSafe,
+  validateAndSanitizePath,
   validateExportPath,
 } from "../../src/utils/security.js";
 
@@ -39,6 +40,13 @@ describe("Security Utilities", () => {
       const baseDir = path.resolve(".");
       const safePath = path.join(baseDir, "src", "file.ts");
       expect(isPathSafe(safePath, baseDir)).toBe(true);
+    });
+
+    it("should allow safe filenames containing consecutive dots", () => {
+      const baseDir = "/home/user/project";
+      const safePath = "/home/user/project/src/file..test.ts";
+      expect(isPathSafe(safePath, baseDir)).toBe(true);
+      expect(validateAndSanitizePath(safePath, baseDir)).toBe(safePath);
     });
 
     it("should handle Windows paths", () => {

@@ -51,9 +51,9 @@ export interface Args {
   collect_details?: boolean;
   max_details?: number;
   watch_debounce?: number;
-  duplicates: boolean;
-  workspaces: boolean;
-  directories: string[];
+  duplicates?: boolean;
+  workspaces?: boolean;
+  directories?: string[];
 }
 
 function similarity(str1: string, str2: string): number {
@@ -401,9 +401,13 @@ export function parseArgs(argv?: string[]): Args {
   }
 
   const configArgs = loadConfig(primaryDirectory);
-  if (configArgs) {
-    return mergeConfigIntoArgs(cliArgs, configArgs, explicitCliKeys);
+  const args = configArgs
+    ? mergeConfigIntoArgs(cliArgs, configArgs, explicitCliKeys)
+    : cliArgs;
+
+  if (args.code_vs_comments) {
+    args.comments = true;
   }
 
-  return cliArgs;
+  return args;
 }

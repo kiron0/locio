@@ -9,11 +9,19 @@ import {
   isMultiTargetScan,
 } from "./export-utils.js";
 
+function csvCell(value: string | number): string {
+  let cell = String(value);
+  if (/^[=+\-@\t\r]/.test(cell)) {
+    cell = `'${cell}`;
+  }
+  return /[",\r\n]/.test(cell) ? `"${cell.replace(/"/g, '""')}"` : cell;
+}
+
 export function buildCsvOutput(summary: Summary, args: Args): string {
   const projectType = !isMultiTargetScan(args)
     ? detectProjectType(args.directory)
     : ProjectType.Unknown;
-  let out = `# Directory,${displayDirectory(args)}\n`;
+  let out = `# Directory,${csvCell(displayDirectory(args))}\n`;
   if (projectType !== ProjectType.Unknown) {
     out += `# Project Type,${formatProjectType(projectType)}\n`;
   }
@@ -23,7 +31,7 @@ export function buildCsvOutput(summary: Summary, args: Args): string {
     for (const ext of extensions) {
       const count = summary.files_by_extension[ext];
       const size = summary.size_by_extension[ext] || 0;
-      out += `${ext},${count},${size}\n`;
+      out += `${csvCell(ext)},${count},${size}\n`;
     }
   } else if (args.comments) {
     out += "Extension,Files,Lines,Code Lines,Comment Lines,Blank Lines,Size";
@@ -39,7 +47,7 @@ export function buildCsvOutput(summary: Summary, args: Args): string {
       const commentLines = summary.comment_lines_by_extension?.[ext] || 0;
       const blankLines = summary.blank_lines_by_extension?.[ext] || 0;
       const size = summary.size_by_extension[ext] || 0;
-      out += `${ext},${count},${lines},${codeLines},${commentLines},${blankLines},${size}`;
+      out += `${csvCell(ext)},${count},${lines},${codeLines},${commentLines},${blankLines},${size}`;
       if (args.code_vs_comments && codeLines > 0) {
         const ratio = ((commentLines || 0) / codeLines).toFixed(2);
         out += `,${ratio}`;
@@ -53,7 +61,7 @@ export function buildCsvOutput(summary: Summary, args: Args): string {
       const count = summary.files_by_extension[ext];
       const lines = summary.lines_by_extension[ext] || 0;
       const size = summary.size_by_extension[ext] || 0;
-      out += `${ext},${count},${lines},${size}\n`;
+      out += `${csvCell(ext)},${count},${lines},${size}\n`;
     }
   }
   const langStats = getLanguageBreakdown(summary);
@@ -62,12 +70,12 @@ export function buildCsvOutput(summary: Summary, args: Args): string {
     if (args.files_only) {
       out += "Language,Files,Size\n";
       for (const lang of langStats) {
-        out += `${lang.language},${lang.files},${lang.size}\n`;
+        out += `${csvCell(lang.language)},${lang.files},${lang.size}\n`;
       }
     } else {
       out += "Language,Files,Lines,Code Lines,Comment Lines,Blank Lines,Size\n";
       for (const lang of langStats) {
-        out += `${lang.language},${lang.files},${lang.lines},${lang.code_lines},${lang.comment_lines},${lang.blank_lines},${lang.size}\n`;
+        out += `${csvCell(lang.language)},${lang.files},${lang.lines},${lang.code_lines},${lang.comment_lines},${lang.blank_lines},${lang.size}\n`;
       }
     }
   }
@@ -77,7 +85,7 @@ export function buildCsvOutput(summary: Summary, args: Args): string {
     out += "Hash,Files Count,Lines,Size,File Paths\n";
     for (const group of summary.duplicate_groups) {
       const paths = group.files.map((f) => f.fullPath).join(";");
-      out += `${group.hash},${group.files.length},${group.lines},${group.size},"${paths}"\n`;
+      out += `${group.hash},${group.files.length},${group.lines},${group.size},${csvCell(paths)}\n`;
     }
   }
 

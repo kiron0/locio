@@ -491,7 +491,7 @@ export function countLinesWithComments(
   content?: string,
 ): CommentStats | null {
   try {
-    const contents = content || fs.readFileSync(filePath, "utf-8");
+    const contents = content ?? fs.readFileSync(filePath, "utf-8");
     const lines = splitContentIntoLines(contents);
 
     const extension = path.extname(filePath);

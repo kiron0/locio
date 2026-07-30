@@ -17,7 +17,6 @@ import { createSummary } from "../types.js";
 import { FileContentCache, FileStatsCache } from "./scanner-cache.js";
 import { buildIgnoreInstance, clearGitignoreCache } from "./scanner-ignore.js";
 import {
-  processCommentRemovalForFiles,
   processFile,
   processFileWithErrorHandling,
   showProgressReport,
@@ -35,14 +34,6 @@ import {
   normalizeGlobEntries,
   validateFileForProcessing,
 } from "./scanner-validation.js";
-
-function hasVerboseFlag(args: Args): args is Args & { verbose?: boolean } {
-  return true;
-}
-
-function getVerboseFlag(args: Args): boolean {
-  return false;
-}
 
 function chunkArray<T>(array: T[], size: number): T[][] {
   const chunks: T[][] = [];
@@ -286,22 +277,11 @@ export async function scanDirectory(
           errors += fileResult.errors;
         } else {
           errors++;
-          if (!args.quiet && getVerboseFlag(args)) {
+          if (!args.quiet) {
             console.error(`Failed to process ${filePath}: ${result.reason}`);
           }
         }
       }
-    }
-
-    if (args.rm_comments) {
-      const commentRemovalResult = processCommentRemovalForFiles(
-        filesToProcess,
-        args,
-        patterns,
-        args.directory,
-      );
-      processed += commentRemovalResult.processed;
-      errors += commentRemovalResult.errors;
     }
 
     if (throttledProgressBar) {

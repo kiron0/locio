@@ -9,11 +9,19 @@ import {
   isMultiTargetScan,
 } from "./export-utils.js";
 
+function tsvCell(value: string | number): string {
+  let cell = String(value).replace(/[\t\r\n]/g, " ");
+  if (/^[=+\-@]/.test(cell)) {
+    cell = `'${cell}`;
+  }
+  return cell;
+}
+
 export function buildTsvOutput(summary: Summary, args: Args): string {
   const projectType = !isMultiTargetScan(args)
     ? detectProjectType(args.directory)
     : ProjectType.Unknown;
-  let out = `# Directory\t${displayDirectory(args)}\n`;
+  let out = `# Directory\t${tsvCell(displayDirectory(args))}\n`;
   if (projectType !== ProjectType.Unknown) {
     out += `# Project Type\t${formatProjectType(projectType)}\n`;
   }
@@ -23,7 +31,7 @@ export function buildTsvOutput(summary: Summary, args: Args): string {
     for (const ext of extensions) {
       const count = summary.files_by_extension[ext];
       const size = summary.size_by_extension[ext] || 0;
-      out += `${ext}\t${count}\t${size}\n`;
+      out += `${tsvCell(ext)}\t${count}\t${size}\n`;
     }
   } else if (args.comments) {
     out +=
@@ -40,7 +48,7 @@ export function buildTsvOutput(summary: Summary, args: Args): string {
       const commentLines = summary.comment_lines_by_extension?.[ext] || 0;
       const blankLines = summary.blank_lines_by_extension?.[ext] || 0;
       const size = summary.size_by_extension![ext] || 0;
-      out += `${ext}\t${count}\t${lines}\t${codeLines}\t${commentLines}\t${blankLines}\t${size}`;
+      out += `${tsvCell(ext)}\t${count}\t${lines}\t${codeLines}\t${commentLines}\t${blankLines}\t${size}`;
       if (args.code_vs_comments && codeLines > 0) {
         const ratio = ((commentLines || 0) / codeLines).toFixed(2);
         out += `\t${ratio}`;
@@ -54,7 +62,7 @@ export function buildTsvOutput(summary: Summary, args: Args): string {
       const count = summary.files_by_extension[ext];
       const lines = summary.lines_by_extension[ext] || 0;
       const size = summary.size_by_extension[ext] || 0;
-      out += `${ext}\t${count}\t${lines}\t${size}\n`;
+      out += `${tsvCell(ext)}\t${count}\t${lines}\t${size}\n`;
     }
   }
   const langStats = getLanguageBreakdown(summary);
@@ -63,13 +71,13 @@ export function buildTsvOutput(summary: Summary, args: Args): string {
     if (args.files_only) {
       out += "Language\tFiles\tSize\n";
       for (const lang of langStats) {
-        out += `${lang.language}\t${lang.files}\t${lang.size}\n`;
+        out += `${tsvCell(lang.language)}\t${lang.files}\t${lang.size}\n`;
       }
     } else {
       out +=
         "Language\tFiles\tLines\tCode Lines\tComment Lines\tBlank Lines\tSize\n";
       for (const lang of langStats) {
-        out += `${lang.language}\t${lang.files}\t${lang.lines}\t${lang.code_lines}\t${lang.comment_lines}\t${lang.blank_lines}\t${lang.size}\n`;
+        out += `${tsvCell(lang.language)}\t${lang.files}\t${lang.lines}\t${lang.code_lines}\t${lang.comment_lines}\t${lang.blank_lines}\t${lang.size}\n`;
       }
     }
   }
@@ -79,7 +87,7 @@ export function buildTsvOutput(summary: Summary, args: Args): string {
     out += "Hash\tFiles Count\tLines\tSize\tFile Paths\n";
     for (const group of summary.duplicate_groups) {
       const paths = group.files.map((f) => f.fullPath).join(";");
-      out += `${group.hash}\t${group.files.length}\t${group.lines}\t${group.size}\t${paths}\n`;
+      out += `${group.hash}\t${group.files.length}\t${group.lines}\t${group.size}\t${tsvCell(paths)}\n`;
     }
   }
 

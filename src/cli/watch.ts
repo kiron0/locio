@@ -117,7 +117,7 @@ export function collectWatchDirectories(rootDir: string): string[] {
 
       const entryPath = path.join(resolvedPath, entry);
       try {
-        if (fs.statSync(entryPath).isDirectory()) {
+        if (fs.lstatSync(entryPath).isDirectory()) {
           walk(entryPath);
         }
       } catch {}
@@ -134,7 +134,7 @@ export function collectWatchSnapshot(rootDir: string): Map<string, number> {
   function walk(entryPath: string): void {
     let stats: fs.Stats;
     try {
-      stats = fs.statSync(entryPath);
+      stats = fs.lstatSync(entryPath);
     } catch {
       return;
     }
@@ -188,6 +188,9 @@ async function performScan(
   incremental: boolean = false,
   logger: ReturnType<typeof createLogger>,
 ): Promise<void | LineCounterError> {
+  const pendingChanges = incremental
+    ? new Set(changedFiles)
+    : new Set<string>();
   const validation = validateDirectory(args.directory);
   if (validation.error) {
     return validation.error;
@@ -205,19 +208,21 @@ async function performScan(
     watchCache = new WatchCache();
   }
 
-  if (incremental && changedFiles.size > 0) {
-    const changedFilesArray = Array.from(changedFiles).slice(0, 10);
+  if (incremental && pendingChanges.size > 0) {
+    const changedFilesArray = Array.from(pendingChanges).slice(0, 10);
     logger.info(
       chalk.cyan(
-        `📝 Changed files: ${changedFiles.size > 10 ? `${changedFiles.size} files` : changedFilesArray.length + " file(s)"}`,
+        `📝 Changed files: ${pendingChanges.size > 10 ? `${pendingChanges.size} files` : changedFilesArray.length + " file(s)"}`,
       ),
     );
     if (changedFilesArray.length > 0) {
       changedFilesArray.forEach((file) => {
         logger.verbose(`   ${chalk.gray("•")} ${file}`);
       });
-      if (changedFiles.size > 10) {
-        logger.verbose(chalk.gray(`   ... and ${changedFiles.size - 10} more`));
+      if (pendingChanges.size > 10) {
+        logger.verbose(
+          chalk.gray(`   ... and ${pendingChanges.size - 10} more`),
+        );
       }
     }
     logger.info("");
@@ -228,7 +233,9 @@ async function performScan(
     return summary;
   }
 
-  changedFiles.clear();
+  for (const changedFile of pendingChanges) {
+    changedFiles.delete(changedFile);
+  }
 
   exportReport(summary, args);
   return;
@@ -267,29 +274,37 @@ function debouncedScan(
 
   watchTimeout = setTimeout(async () => {
     if (isScanning) {
+      debouncedScan(args, "", logger);
       return;
     }
 
     isScanning = true;
+    let shouldRescan = false;
 
-    logger.info(chalk.cyan("🔄 Changes detected. Rescanning...\n"));
+    try {
+      logger.info(chalk.cyan("🔄 Changes detected. Rescanning...\n"));
 
-    const result = await performScan(args, true, logger);
-    if (isError(result)) {
-      logger.error(`\n❌ Error: ${result.message}`);
-      if (result.suggestion) {
-        logger.warn(`\n💡 Suggestion: ${result.suggestion}`);
+      const result = await performScan(args, true, logger);
+      if (isError(result)) {
+        logger.error(`\n❌ Error: ${result.message}`);
+        if (result.suggestion) {
+          logger.warn(`\n💡 Suggestion: ${result.suggestion}`);
+        }
+      } else {
+        shouldRescan = true;
+        logger.info(chalk.gray("\n" + "─".repeat(60)));
+        logger.info(
+          chalk.gray(
+            `👀 Watching for changes... (Press ${chalk.yellow("Ctrl+C")} to stop)`,
+          ),
+        );
       }
-    } else {
-      logger.info(chalk.gray("\n" + "─".repeat(60)));
-      logger.info(
-        chalk.gray(
-          `👀 Watching for changes... (Press ${chalk.yellow("Ctrl+C")} to stop)`,
-        ),
-      );
+    } finally {
+      isScanning = false;
+      if (shouldRescan && changedFiles.size > 0) {
+        debouncedScan(args, "", logger);
+      }
     }
-
-    isScanning = false;
   }, debounceMs);
 }
 
@@ -327,9 +342,7 @@ function startFallbackWatching(
   }, pollInterval);
 
   usingFallbackWatchers = true;
-  logger.warn(
-    "Recursive watch is unavailable here. Falling back to polling.",
-  );
+  logger.warn("Recursive watch is unavailable here. Falling back to polling.");
 }
 
 export async function startWatchMode(args: Args): Promise<void> {
@@ -395,7 +408,10 @@ export async function startWatchMode(args: Args): Promise<void> {
           return;
         }
 
-        if (args.export && filename.startsWith("LocIO-report.")) {
+        if (
+          args.export &&
+          path.basename(filename).startsWith("LocIO-report.")
+        ) {
           return;
         }
 

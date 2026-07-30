@@ -40,6 +40,8 @@ export class FileStatsCache {
 export class FileContentCache {
   private cache = new Map<string, string>();
   private maxCacheSize = FILE_CONSTANTS.MAX_MEMORY_FILES;
+  private maxCacheBytes = 16 * 1024 * 1024;
+  private cachedBytes = 0;
 
   async get(filePath: string): Promise<string | null> {
     if (this.cache.has(filePath)) {
@@ -48,15 +50,24 @@ export class FileContentCache {
 
     try {
       const content = await fs.promises.readFile(filePath, "utf-8");
+      const contentBytes = Buffer.byteLength(content);
 
-      if (this.cache.size >= this.maxCacheSize) {
+      while (
+        this.cache.size >= this.maxCacheSize ||
+        (this.cachedBytes + contentBytes > this.maxCacheBytes &&
+          this.cache.size > 0)
+      ) {
         const firstKey = this.cache.keys().next().value;
         if (firstKey !== undefined) {
+          this.cachedBytes -= Buffer.byteLength(this.cache.get(firstKey)!);
           this.cache.delete(firstKey);
         }
       }
 
-      this.cache.set(filePath, content);
+      if (contentBytes <= this.maxCacheBytes) {
+        this.cache.set(filePath, content);
+        this.cachedBytes += contentBytes;
+      }
       return content;
     } catch {
       return null;
@@ -65,5 +76,6 @@ export class FileContentCache {
 
   clear(): void {
     this.cache.clear();
+    this.cachedBytes = 0;
   }
 }

@@ -238,7 +238,11 @@ describe("Watch Mode", () => {
 
     it("creates non-recursive watchers for each collected directory", () => {
       fs.mkdirSync(path.join(tempDir, "src", "nested"), { recursive: true });
-      const filePath = createTestFile(tempDir, "src/nested/file.ts", "const x = 1;");
+      const filePath = createTestFile(
+        tempDir,
+        "src/nested/file.ts",
+        "const x = 1;",
+      );
 
       const before = collectWatchSnapshot(tempDir);
       fs.writeFileSync(filePath, "const x = 2;", "utf-8");

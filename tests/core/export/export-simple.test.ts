@@ -1,8 +1,9 @@
 import * as fs from "fs";
 import * as path from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { OutputFormat } from "../../../src/cli/args.js";
+import { type Args, OutputFormat } from "../../../src/cli/args.js";
 import { exportReport } from "../../../src/core/export/export.js";
+import { buildHtmlOutput } from "../../../src/core/export/export-html.js";
 import { buildHumanReport } from "../../../src/core/export/export-human.js";
 import { buildJsonOutput } from "../../../src/core/export/export-json.js";
 import type { Summary } from "../../../src/core/types.js";
@@ -71,7 +72,7 @@ describe("Export Functionality - Simple Tests", () => {
     return summary;
   }
 
-  function createTestArgs(exportFormat?: OutputFormat | OutputFormat[]) {
+  function createTestArgs(exportFormat?: OutputFormat | OutputFormat[]): Args {
     return {
       directory: tempDir,
       directories: [tempDir],
@@ -255,6 +256,28 @@ describe("Export Functionality - Simple Tests", () => {
         expect(content).toContain("dependencyGraph");
         expect(content).toContain("Directory Structure Graph");
       }
+    });
+
+    it("escapes filenames and inline script data", () => {
+      const summary = createTestSummary();
+      summary.details[0] = {
+        directory: `${tempDir}/\"><img src=x onerror=alert(1)>`,
+        name: "</script><script>alert(1)</script>.ts",
+        extension: "</script><script>alert(2)</script>",
+        size: 50,
+        lines: 5,
+      };
+      const args = createTestArgs(OutputFormat.Html);
+      args.top_files = 1;
+      args.top_dirs = 1;
+
+      const content = buildHtmlOutput(summary, args);
+
+      expect(content).not.toContain("<script>alert(1)</script>");
+      expect(content).not.toContain("<script>alert(2)</script>");
+      expect(content).not.toContain("<img src=x onerror=alert(1)>");
+      expect(content).toContain("\\u003c/script\\u003e");
+      expect(content).toContain("&lt;img src=x onerror=alert(1)&gt;");
     });
   });
 

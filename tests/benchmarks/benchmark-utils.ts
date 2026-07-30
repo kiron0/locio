@@ -1,7 +1,7 @@
 interface BenchmarkOptions {
   runs?: number;
   warmupRuns?: number;
-};
+}
 
 const DEFAULT_RUNS = 7;
 const DEFAULT_WARMUP_RUNS = 1;

@@ -107,7 +107,10 @@ async function run(args: Args): Promise<void | LineCounterError> {
   const { combined } = mergeSummaries(summaryMap);
   combined.by_language = groupByLanguage(combined);
   if (args.duplicates && combined.details.length > 0) {
-    combined.duplicate_groups = findDuplicates(combined.details, targetDirs[0]!);
+    combined.duplicate_groups = findDuplicates(
+      combined.details,
+      targetDirs[0]!,
+    );
   }
 
   args.directories = targetDirs;
@@ -129,8 +132,7 @@ async function runSingleDirectory(
   const targetPath = validation.path;
   const stats = fs.statSync(targetPath);
   let summary:
-    | Awaited<ReturnType<typeof scanDirectory>>
-    | ReturnType<typeof scanFile>;
+    Awaited<ReturnType<typeof scanDirectory>> | ReturnType<typeof scanFile>;
 
   if (stats.isDirectory()) {
     const projectType = detectProjectType(targetPath);
